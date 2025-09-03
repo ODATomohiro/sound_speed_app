@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>音速測定（ブラウザ版・Mac対応）</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>音速測定（ブラウザ）</h1>
+    <p class="sub">短いパルス音を発音し、その反射（エコー）から往復時間 Δt を測定して音速を求めます。</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>1. 準備</h2>
+      <div class="controls">
+        <button id="btnStart">① マイク開始</button>
+        <button id="btnPulse" disabled>② パルス発音 + 記録</button>
+        <button id="btnTestBeep" disabled>発音テスト</button>
+        <button id="btnReset">リセット</button>
+      </div>
+      <div class="tips">
+        <details open>
+          <summary>よくある原因（Mac/Safari/Chrome）</summary>
+          <ul>
+            <li><b>HTTPS または localhost</b> で開いてください（file直開きは不可のことあり）。</li>
+            <li>macOS: 設定 → <b>プライバシーとセキュリティ → マイク</b> でブラウザに許可を付与。</li>
+            <li>Safari: アドレスバー左の「カメラ/マイク」からこのサイトを <b>許可</b> に。</li>
+            <li>Chrome: 右端の🔒→<b>サイトの設定</b>→マイク<b>許可</b>。デバイス選択も確認。</li>
+            <li>外付けスピーカーを使用すると検出が安定（PCスピーカーがマイクに届く位置に）。</li>
+          </ul>
+        </details>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2. 設定</h2>
+      <div class="grid two">
+        <label>しきい値（検出感度）
+          <input id="thresh" type="range" min="0.02" max="0.6" step="0.01" value="0.15">
+          <span id="threshVal">0.15</span>
+        </label>
+        <label>最小遅延(ms)（直達音を避ける）
+          <input id="minGapMs" type="range" min="2" max="80" step="1" value="8">
+          <span id="minGapVal">8</span>
+        </label>
+        <label>録音窓(ms)
+          <input id="windowMs" type="range" min="100" max="1500" step="50" value="500">
+          <span id="windowVal">500</span>
+        </label>
+        <label>パルス長(ms)
+          <input id="pulseMs" type="range" min="1" max="30" step="1" value="5">
+          <span id="pulseVal">5</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. 波形</h2>
+      <div class="canvas-row">
+        <canvas id="wave" width="1200" height="300"></canvas>
+        <div class="legend">
+          <div><span class="chip chip-t1"></span>t1（発音検出）</div>
+          <div><span class="chip chip-t2"></span>t2（反射検出）</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="btnAuto" disabled>自動検出</button>
+        <button id="btnSetT1" disabled>t1 をクリックで設定</button>
+        <button id="btnSetT2" disabled>t2 をクリックで設定</button>
+        <button id="btnClearMarks" disabled>マーク削除</button>
+        <button id="btnPng" disabled>PNG保存</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>4. 計算</h2>
+      <div class="grid two">
+        <label>壁までの距離 D（m）
+          <input id="dist" type="number" step="0.01" value="2.00">
+        </label>
+        <label>室温 T（℃）
+          <input id="tempC" type="number" step="0.1" value="20.0">
+        </label>
+      </div>
+      <div class="results">
+        <div>Δt = <span id="dtVal">–</span> s</div>
+        <div>音速（測定値） v = <span id="vMeasured">–</span> m/s</div>
+        <div>音速（理論：331.3 + 0.606T） v<sub>theory</sub> = <span id="vTheory">–</span> m/s</div>
+      </div>
+      <div class="controls">
+        <button id="btnCompute" disabled>計算</button>
+        <button id="btnCsv" disabled>CSV出力</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>5. 使い方（超要約）</h2>
+      <ol>
+        <li>①「マイク開始」を押して許可。</li>
+        <li>②「パルス発音 + 記録」を押すと波形が描画。</li>
+        <li>「自動検出」または「t1/t2 をクリックで設定」で Δt を確定。</li>
+        <li>距離 D を入力して「計算」。必要なら CSV を保存。</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    <small>© 2025 音速測定アプリ (Web Audio API). 教材・授業用にどうぞ。</small>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
