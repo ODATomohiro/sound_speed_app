@@ -3,23 +3,23 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>音速測定（ブラウザ版 Pro）</title>
+  <title>音速測定（時間軸表示・正確クリック版）</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <header>
-    <h1>音速測定（ブラウザ Pro）</h1>
-    <p class="sub">短いパルス音の反射から往復時間 Δt を測り、音速 v = 2D/Δt を求めます。Mac/Safari対応・ズーム／パン・デバイス選択付き。</p>
+    <h1>音速測定（時間軸表示・正確クリック）</h1>
+    <p class="sub">クリック位置に正確に t1/t2 を置けるよう調整。x軸に「ms」表示。温度入力は排除し、v = 2D/Δt のみ表示。</p>
   </header>
 
   <main>
     <section class="card">
       <h2>1. デバイス</h2>
       <div class="grid.three" style="display:grid;grid-template-columns:1.2fr 1.2fr auto;gap:10px">
-        <label>マイク（入力デバイス）
+        <label>マイク（入力）
           <select id="micSelect"><option>（許可後に取得）</option></select>
         </label>
-        <label>スピーカー（出力デバイス）
+        <label>スピーカー（出力）
           <select id="spkSelect"><option>（対応ブラウザのみ）</option></select>
           <span class="small" id="spkNote"></span>
         </label>
@@ -28,31 +28,31 @@
           <button id="btnRefresh">再検出</button>
         </div>
       </div>
-      <div class="tips small">
-        HTTPSまたはlocalhostで開いてください。macOS: システム設定→プライバシーとセキュリティ→マイク でブラウザに許可。
-      </div>
     </section>
 
     <section class="card">
       <h2>2. 設定</h2>
       <div class="grid three">
-        <label>しきい値（検出感度）
+        <label>しきい値（自動検出）
           <input id="thresh" type="range" min="0.02" max="0.6" step="0.01" value="0.15">
           <span id="threshVal">0.15</span>
         </label>
-        <label>最小遅延(ms)（直達音を避ける）
+        <label>最小遅延(ms)
           <input id="minGapMs" type="range" min="2" max="80" step="1" value="12">
           <span id="minGapVal">12</span>
         </label>
         <label>録音窓(ms)
-          <input id="windowMs" type="range" min="100" max="1500" step="50" value="600">
+          <input id="windowMs" type="range" min="100" max="2000" step="50" value="600">
           <span id="windowVal">600</span>
         </label>
         <label>パルス長(ms)
           <input id="pulseMs" type="range" min="1" max="30" step="1" value="5">
           <span id="pulseVal">5</span>
         </label>
-        <div></div><div class="controls">
+        <div class="legend">
+          <label style="display:flex;align-items:center;"><input id="snapPeak" type="checkbox">クリック時に近傍ピークへスナップ</label>
+        </div>
+        <div class="controls">
           <button id="btnPulse" disabled>② パルス発音 + 記録</button>
           <button id="btnTestBeep" disabled>発音テスト</button>
           <button id="btnReset" class="secondary">リセット</button>
@@ -61,18 +61,30 @@
     </section>
 
     <section class="card">
-      <h2>3. 波形（ズーム／パン対応）</h2>
+      <h2>3. 波形（時間軸・ズーム・パン）</h2>
       <div class="canvas-wrap">
-        <canvas id="wave" width="1200" height="340" title="ホイール：ズーム / ドラッグ：パン / ダブルクリック：t1→t2"></canvas>
+        <canvas id="wave" width="1200" height="380" title="ホイール：ズーム / ドラッグ：パン / クリック：t1→t2 / ダブルクリック：t1→t2"></canvas>
       </div>
       <div class="legend">
-        <div><span class="chip chip-t1"></span>t1（発音） / <span class="chip chip-t2"></span>t2（反射）</div>
-        <div>操作: <kbd>ダブルクリック</kbd>で t1→t2、<kbd>1</kbd>/<kbd>2</kbd>でモード切替、<kbd>R</kbd>でズームリセット、<kbd>⌘/Ctrl+Z</kbd>で最後のマーク解除</div>
+        <div><span class="chip chip-t1"></span>t1 / <span class="chip chip-t2"></span>t2（縦線をドラッグで微調整）</div>
+        <div>←/→ で最後に触ったマーカーを 1 サンプル（Shift で ×10）移動 / R でズームリセット</div>
+      </div>
+      <div class="grid two" style="margin-top:8px">
+        <label>t1（ms）
+          <div class="controls">
+            <input id="t1ms" type="number" step="0.01" placeholder="例: 12.34">
+            <button id="btnApplyT1">t1に適用</button>
+          </div>
+        </label>
+        <label>t2（ms）
+          <div class="controls">
+            <input id="t2ms" type="number" step="0.01" placeholder="例: 45.67">
+            <button id="btnApplyT2">t2に適用</button>
+          </div>
+        </label>
       </div>
       <div class="controls">
         <button id="btnAuto" disabled>自動検出</button>
-        <button id="btnSetT1" disabled>t1 クリック</button>
-        <button id="btnSetT2" disabled>t2 クリック</button>
         <button id="btnClearMarks" disabled>マーク削除</button>
         <button id="btnZoomReset" class="secondary">ズームリセット</button>
         <button id="btnPng" disabled>PNG保存</button>
@@ -80,40 +92,27 @@
     </section>
 
     <section class="card">
-      <h2>4. 計算</h2>
+      <h2>4. 計算（温度入力なし）</h2>
       <div class="grid two">
         <label>壁までの距離 D（m）
           <input id="dist" type="number" step="0.01" value="2.00">
         </label>
-        <label>室温 T（℃）
-          <input id="tempC" type="number" step="0.1" value="20.0">
-        </label>
       </div>
       <div class="results">
-        <div>Δt = <span id="dtVal">–</span> s</div>
-        <div>音速（測定値） v = <span id="vMeasured">–</span> m/s</div>
-        <div>音速（理論：331.3 + 0.606T） v<sub>theory</sub> = <span id="vTheory">–</span> m/s</div>
+        <div>t1 = <span id="t1Val">–</span> ms</div>
+        <div>t2 = <span id="t2Val">–</span> ms</div>
+        <div>Δt = <span id="dtVal">–</span> ms</div>
+        <div>v = <span id="vMeasured">–</span> m/s</div>
       </div>
       <div class="controls">
         <button id="btnCompute" disabled>計算</button>
         <button id="btnCsv" disabled>CSV出力</button>
       </div>
     </section>
-
-    <section class="card">
-      <h2>5. 使い方（要点）</h2>
-      <ol>
-        <li>①「マイク開始」で許可後、必要ならデバイスを選択して「再検出」。</li>
-        <li>②「パルス発音 + 記録」で波形表示。ホイールでズーム、ドラッグでパン。</li>
-        <li>自動検出 or <b>ダブルクリック</b>で t1→t2。<b>1/2キー</b>でクリックモード切替。</li>
-        <li>距離 D を入力して「計算」。CSV保存やPNG保存も可。</li>
-      </ol>
-      <p class="small">出力デバイス選択は <code>HTMLMediaElement.setSinkId</code> 対応ブラウザ（Chrome系）で有効。Safariは未対応の可能性があります。</p>
-    </section>
   </main>
 
   <footer>
-    <small>© 2025 音速測定アプリ Pro (Web Audio API). 教材・授業用にどうぞ。</small>
+    <small>© 2025 音速測定アプリ（時間軸表示・正確クリック版）</small>
   </footer>
 
   <script src="app.js"></script>
