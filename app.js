@@ -1,4 +1,4 @@
-// 時間軸表示・正確クリック版
+// 大きい波形＆自動スケール版
 (() => {
   const els = {
     btnStart: document.getElementById('btnStart'),
@@ -17,6 +17,10 @@
     windowVal: document.getElementById('windowVal'),
     pulseMs: document.getElementById('pulseMs'),
     pulseVal: document.getElementById('pulseVal'),
+    ampMode: document.getElementById('ampMode'),
+    gainWrap: document.getElementById('gainWrap'),
+    gain: document.getElementById('gain'),
+    gainVal: document.getElementById('gainVal'),
     snapPeak: document.getElementById('snapPeak'),
     wave: document.getElementById('wave'),
     t1ms: document.getElementById('t1ms'),
@@ -45,6 +49,9 @@
   bindRange(els.minGapMs, els.minGapVal);
   bindRange(els.windowMs, els.windowVal);
   bindRange(els.pulseMs, els.pulseVal);
+
+  els.ampMode.addEventListener('change', ()=>{ els.gainWrap.style.display = (els.ampMode.value==='fixed') ? '' : 'none'; drawWave(); });
+  els.gain.addEventListener('input', ()=>{ els.gainVal.textContent = Number(els.gain.value).toFixed(1) + '×'; drawWave(); });
 
   let audioCtx=null, sampleRate=48000, using=null;
   let micStream=null, micNode=null, workletNode=null, scriptNode=null;
@@ -149,12 +156,18 @@
     return Math.round((idx - viewStart) * Wcss / span);
   }
 
-  // Drawing with time axis
+  // Drawing helpers
   function msOf(idx){ return (idx / sampleRate) * 1000; }
   function niceStep(spanMs){
     const steps=[0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000,2000];
     for (let s of steps){ if (spanMs/ s <= 10) return s; } return 5000;
   }
+  function maxAbsInRange(i0, i1){
+    let m = 0;
+    for(let i=i0;i<i1;i++){ const a = Math.abs(captured[i]||0); if (a>m) m=a; }
+    return m;
+  }
+
   function drawWave(){
     resizeCanvasForDPR();
     const rect = els.wave.getBoundingClientRect();
@@ -162,9 +175,10 @@
     ctx.clearRect(0,0,W,H);
     ctx.fillStyle='#0b1020'; ctx.fillRect(0,0,W,H);
 
-    // horizontal grid
+    // horizontal grid (above axis area)
+    const axisH = 26;
     ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=1;
-    for(let y=0;y<=H-24;y+=50){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    for(let y=0;y<=H-axisH;y+=50){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
 
     // time ticks bottom
     const startMs = msOf(viewStart), endMs = msOf(viewEnd), spanMs = endMs - startMs;
@@ -176,8 +190,8 @@
     for(let t=firstTick; t<=endMs+1e-6; t+=step){
       const idx = Math.round(t/1000 * sampleRate);
       const x = idxToXCss(idx);
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H-22); ctx.stroke();
-      ctx.fillText(t.toFixed(step<1?1:(step<10?1:0)) + ' ms', x+3, H-6);
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H-axisH); ctx.stroke();
+      ctx.fillText(t.toFixed(step<1?1:(step<10?1:0)) + ' ms', x+3, H-8);
     }
 
     if (!captured.length){
@@ -186,7 +200,19 @@
       return;
     }
 
-    // waveform
+    // amplitude scale (auto or fixed)
+    const usableH = H-axisH;
+    const headroom = 0.48; // fraction of usable height for peak
+    let gain = 1;
+    if (els.ampMode.value==='fixed'){
+      gain = Number(els.gain.value) * usableH * 0.45; // px per full-scale
+    } else {
+      const maxAbs = (els.ampMode.value==='view') ? maxAbsInRange(viewStart, viewEnd) : maxAbsInRange(0, captured.length);
+      const safe = Math.max(1e-6, maxAbs);
+      gain = usableH * headroom / safe; // px per unit amplitude
+    }
+
+    // waveform min/max rendering in view
     const s=viewStart, e=viewEnd, span=Math.max(1,e-s);
     ctx.strokeStyle='#7dd3fc'; ctx.lineWidth=1.5; ctx.beginPath();
     for(let x=0;x<W;x++){
@@ -194,7 +220,8 @@
       const i1 = Math.floor(s + span*(x+1)/W);
       let lo=1e9, hi=-1e9;
       for(let i=i0;i<i1;i++){ const v=captured[i]||0; if(v<lo)lo=v; if(v>hi)hi=v; }
-      const yLo= (H-24)/2 - lo*((H-24)*0.45), yHi=(H-24)/2 - hi*((H-24)*0.45);
+      if (lo===1e9) { lo=0; hi=0; }
+      const yLo= usableH/2 - lo*gain, yHi=usableH/2 - hi*gain;
       ctx.moveTo(x,yLo); ctx.lineTo(x,yHi);
     }
     ctx.stroke();
@@ -204,7 +231,7 @@
     function drawMarker(idx,color,label){
       if(idx==null) return; if(idx<viewStart||idx>viewEnd) return;
       const x=idxToXCss(idx);
-      ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H-24); ctx.stroke();
+      ctx.strokeStyle=color; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,usableH); ctx.stroke();
       const ms = msOf(idx).toFixed(2);
       ctx.fillStyle=color; ctx.font='12px system-ui';
       ctx.fillText(`${label}:${ms} ms`, x+4, 14);
@@ -212,7 +239,7 @@
 
     // footer
     ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='12px system-ui';
-    ctx.fillText(`表示: ${spanMs.toFixed(1)} ms  /  Fs: ${sampleRate} Hz`, 16, H-6);
+    ctx.fillText(`表示: ${spanMs.toFixed(1)} ms  /  Fs: ${sampleRate} Hz`, 16, H-8);
   }
 
   // Envelope & snap
@@ -304,8 +331,6 @@
   });
 
   // Auto detect
-  function envelope(data){ const N=data.length; const abs=new Float32Array(N); for(let i=0;i<N;i++) abs[i]=Math.abs(data[i]); const win=Math.max(8, Math.round(sampleRate*0.0008)); const env=new Float32Array(N); let sum=0; for(let i=0;i<N;i++){ sum+=abs[i]; if(i>=win) sum-=abs[i-win]; env[i]=sum/Math.min(i+1,win); } return env; }
-  function refinePeakNear(arr, idx, radius){ const N=arr.length; let best=idx, val=arr[idx]||0; for(let i=Math.max(0,idx-radius); i<=Math.min(N-1,idx+radius); i++){ if(arr[i]>val){ val=arr[i]; best=i; } } return best; }
   function autoDetect(){
     if(!captured.length) return;
     const thresh=Number(els.thresh.value), minGapMs=Number(els.minGapMs.value), minGapSamples=Math.round(sampleRate*(minGapMs/1000));
@@ -337,28 +362,27 @@
     els.vMeasured.textContent = (D>0 && dt>0) ? (2*D/dt).toFixed(2) : '–';
   }
 
+  // Auto recompute on D change
+  els.dist.addEventListener('input', updateAll);
+  els.dist.addEventListener('change', updateAll);
+
   // Wire UI
   els.btnStart.addEventListener('click', async ()=>{ try{ await startMic(); }catch(e){ alert('マイク開始に失敗: '+e); } });
   els.btnRefresh.addEventListener('click', async ()=>{ await refreshDevices(); await applySpeaker(); });
-  els.micSelect.addEventListener('change', ()=>{});
-  els.spkSelect.addEventListener('change', async ()=>{ await applySpeaker(); });
-
   els.btnPulse.addEventListener('click', ()=>{ if(!started) return; recordWithPulse(); });
   els.btnTestBeep.addEventListener('click', ()=>{ if(!started) return; playPulse(); });
   els.btnReset.addEventListener('click', ()=>{ captured=new Float32Array(0); t1Index=t2Index=null; setFullView(); drawWave(); updateAll(); });
   els.btnAuto.addEventListener('click', autoDetect);
   els.btnZoomReset.addEventListener('click', ()=>{ setFullView(); drawWave(); });
-
   els.btnApplyT1.addEventListener('click', ()=>{ const ms=parseFloat(els.t1ms.value); setMarkerMs('t1', ms); });
   els.btnApplyT2.addEventListener('click', ()=>{ const ms=parseFloat(els.t2ms.value); setMarkerMs('t2', ms); });
-
-  function savePNG(){ const a=document.createElement('a'); a.download='waveform.png'; a.href=els.wave.toDataURL('image/png'); a.click(); }
-  function saveCSV(){
+  els.btnPng.addEventListener('click', ()=>{ const a=document.createElement('a'); a.download='waveform.png'; a.href=els.wave.toDataURL('image/png'); a.click(); });
+  els.btnCsv.addEventListener('click', ()=>{
     const dt = (t1Index!=null && t2Index!=null) ? Math.abs(t2Index - t1Index)/sampleRate : NaN;
     const D = Number(els.dist.value);
     const v = (Number.isFinite(dt)&&dt>0&&D>0) ? (2*D/dt) : NaN;
-    let csv='sample_rate,window_ms,threshold,min_gap_ms,pulse_ms,input_path\\n';
-    csv += [sampleRate, els.windowMs.value, els.thresh.value, els.minGapMs.value, els.pulseMs.value, using].join(',')+'\\n\\n';
+    let csv='sample_rate,window_ms,threshold,min_gap_ms,pulse_ms,amp_mode,gain\\n';
+    csv += [sampleRate, els.windowMs.value, els.thresh.value, els.minGapMs.value, els.pulseMs.value, els.ampMode.value, (els.ampMode.value==='fixed'?els.gain.value:'')].join(',')+'\\n\\n';
     csv += 't1_ms,t2_ms,dt_ms,dist_m,v_measured_mps\\n';
     const t1ms = (t1Index!=null)?msOf(t1Index).toFixed(3):'';
     const t2ms = (t2Index!=null)?msOf(t2Index).toFixed(3):'';
@@ -366,11 +390,9 @@
     csv += '\\nindex,amplitude\\n';
     for(let i=0;i<captured.length;i++){ csv += i+','+(captured[i].toFixed(6))+'\\n'; }
     const blob=new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.download='sound_speed_measurement.csv'; a.href=URL.createObjectURL(blob); a.click();
-  }
-  els.btnPng.addEventListener('click', savePNG);
-  els.btnCsv.addEventListener('click', saveCSV);
+  });
 
-  // Init & resize
+  // Init
   function init(){ resizeCanvasForDPR(); drawWave(); }
   window.addEventListener('resize', ()=>{ drawWave(); });
   init();
