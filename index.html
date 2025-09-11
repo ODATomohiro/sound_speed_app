@@ -35,6 +35,49 @@ footer{padding:24px 16px;color:#6b7280;text-align:center}
 kbd{padding:2px 6px;border:1px solid #cbd5e1;border-bottom-width:2px;border-radius:6px;background:#f8fafc;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#0b1020;color:#e2e8f0;border-radius:12px;padding:10px;white-space:pre-wrap;line-height:1.35}
 @media (max-width:820px){.grid.two{grid-template-columns:1fr}.grid.three{grid-template-columns:1fr}.grid.four{grid-template-columns:1fr 1fr}}
+
+/* ==== デザイン調整 ==== */
+.card {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  background: #f9f9ff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+button {
+  margin: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  background: #007bff;
+  color: #fff;
+  font-size: 14px;
+}
+button:hover {
+  background: #0056b3;
+}
+#simplePoints, #simpleDiff {
+  font-weight: bold;
+  color: #d9534f;
+  padding: 2px 6px;
+  background: #fff;
+  border-radius: 4px;
+}
+.marker {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+}
+.marker:nth-child(odd) {
+  background: #ff5733; /* オレンジ */
+}
+.marker:nth-child(even) {
+  background: #007bff; /* 青 */
+}
+
 </style>
 </head>
 <body>
@@ -167,6 +210,15 @@ kbd{padding:2px 6px;border:1px solid #cbd5e1;border-bottom-width:2px;border-radi
       <h2>6. ログ</h2>
       <div id="log" class="mono" style="min-height:120px"></div>
     </section>
+  
+    <!-- 追加機能: 簡易クリック2点測定 -->
+    <section id="simpleSection" class="card">
+      <h2>7. 簡易測定モード（クリックで2点間測定）</h2>
+      <p>選択した点: <span id="simplePoints">0</span></p>
+      <p>時間差: <span id="simpleDiff">-</span> ms</p>
+      <button id="simpleReset">リセット</button>
+    </section>
+
   </main>
 
   <footer>
@@ -420,6 +472,37 @@ window.addEventListener('resize', ()=>{ drawWave(); });
 
 function init(){ resizeCanvasForDPR(); drawWave(); refreshDevices(); updateHintsAndAuto(); }
 init();
+
+// ---- 簡易クリック2点測定の追加機能 ----
+let simplePoints = [];
+const simplePointsEl = document.getElementById("simplePoints");
+const simpleDiffEl = document.getElementById("simpleDiff");
+const simpleResetBtn = document.getElementById("simpleReset");
+
+function resetSimple() {
+  simplePoints = [];
+  simplePointsEl.textContent = "0";
+  simpleDiffEl.textContent = "-";
+}
+simpleResetBtn.addEventListener("click", resetSimple);
+
+E.wave.addEventListener("click", function(ev) {
+  if (!captured.length) return;
+  const idx = xToIdxCss(clientXToCanvasCssX(ev.clientX));
+  const ms = (idx / sampleRate) * 1000;
+  if (simplePoints.length < 2) {
+    simplePoints.push(ms);
+  } else {
+    resetSimple();
+    simplePoints.push(ms);
+  }
+  simplePointsEl.textContent = simplePoints.map(v => v.toFixed(3) + "ms").join(", ");
+  if (simplePoints.length === 2) {
+    const diff = Math.abs(simplePoints[1] - simplePoints[0]);
+    simpleDiffEl.textContent = diff.toFixed(3);
+  }
+});
+
 </script>
 </body>
 </html>
