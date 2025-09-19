@@ -6,14 +6,9 @@
 <title>音波解析</title>
 <style>
   :root{
-    --card-bg:#fff;
-    --page-bg:#f0f2f5;
-    --text:#333;
-    --primary:#1b84ff;
-    --accent:#ff6a00;
-    --ok:#28a745;
-    --danger:#dc3545;
-    --mute:#6c757d;
+    --card-bg:#fff; --page-bg:#f0f2f5; --text:#333;
+    --primary:#1b84ff; --accent:#ff6a00; --ok:#28a745;
+    --danger:#dc3545; --mute:#6c757d;
   }
   body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--page-bg);margin:0;padding:20px;color:var(--text);}
   h1{margin:0 0 16px;font-size:1.6em;color:#222;}
@@ -21,7 +16,7 @@
   .card{background:var(--card-bg);border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,.08);padding:16px 20px;margin-bottom:20px;}
   .split{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
   .block{flex:1;min-width:260px}
-  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   button{padding:8px 12px;border:none;border-radius:10px;font-size:.95em;cursor:pointer;color:#fff;transition:.15s}
   button:disabled{background:#c9c9c9;cursor:default}
   .btn-impulse{background:var(--accent)} .btn-impulse:hover{filter:brightness(.95)}
@@ -30,9 +25,10 @@
   .btn-rec{background:var(--danger)} .btn-rec:hover{filter:brightness(.95)}
   .btn-stoprec{background:var(--mute)} .btn-stoprec:hover{filter:brightness(.95)}
   .btn-action{background:var(--primary)} .btn-action:hover{filter:brightness(.95)}
-  label{display:inline-flex;align-items:center;gap:6px}
-  input[type=number]{width:90px;padding:6px 8px;border:1px solid #ddd;border-radius:8px;background:#fafafa;color:#222}
-  select{padding:6px 8px;border-radius:8px;border:1px solid #ddd;background:#fafafa;color:#222}
+  label{display:inline-flex;gap:6px;align-items:center}
+  input[type=number]{width:90px;padding:6px 8px;border:1px solid #ddd;border-radius:8px;background:#fafafa}
+  input[type=checkbox]{transform:scale(1.1)}
+  select{padding:6px 8px;border-radius:8px;border:1px solid #ddd;background:#fafafa}
   .badge{display:inline-block;margin-top:8px;background:#eef;padding:6px 10px;border-radius:10px;font-size:.85em;color:#333}
   #waveWrap{position:relative;width:min(100%,1000px);margin-top:8px}
   #wave{width:100%;height:260px;display:block;background:#fff;border:1px solid #ddd;border-radius:12px}
@@ -45,7 +41,6 @@
 <body>
 <h1>音波解析</h1>
 
-<!-- 1,2,3 を1カードに横並び -->
 <div class="card split">
   <div class="block">
     <h2>1. 再生</h2>
@@ -65,8 +60,8 @@
     <div class="note" id="recStatus">未録音</div>
   </div>
   <div class="block">
-    <h2>3. 発音＋録音</h2>
-    <div class="row" style="align-items:center">
+    <h2>3. 録音→発音</h2>
+    <div class="row">
       <label>音の種類:
         <select id="soundType">
           <option value="impulse">インパルス</option>
@@ -79,9 +74,11 @@
   </div>
 </div>
 
-<!-- 波形（録音データ用） -->
 <div class="card">
   <h2>4. 波形表示（録音データ）</h2>
+  <div class="row">
+    <label><input type="checkbox" id="chkNormalize" checked> 表示を自動スケーリング（最大振幅で正規化）</label>
+  </div>
   <div id="waveWrap">
     <canvas id="wave" width="1000" height="260"></canvas>
   </div>
@@ -92,10 +89,9 @@
     <div class="badge">点B: <span id="ptB">—</span> ms</div>
     <div class="badge">Δt: <span id="dtMs">—</span> ms</div>
   </div>
-  <div class="badge" style="margin-top:8px">サンプリングレート: <span id="srVal">—</span> Hz ／ 1サンプル ≈ <span id="spMsVal">—</span> ms</div>
+  <div class="badge" style="margin-top:8px">サンプリングレート（録音基準）: <span id="srVal">—</span> Hz ／ 1サンプル ≈ <span id="spMsVal">—</span> ms</div>
 </div>
 
-<!-- 音速計算 -->
 <div class="card">
   <h2>5. 音速計算</h2>
   <div class="row">
@@ -108,7 +104,6 @@
   </div>
 </div>
 
-<!-- FFT（録音データに対して） -->
 <div class="card">
   <h2>6. FFTスペクトル（録音データ）</h2>
   <button id="btnFFT" class="btn-action">スペクトル解析</button>
@@ -116,7 +111,6 @@
   <div class="note">ピーク周波数（上位5）: <span id="peaks">—</span></div>
 </div>
 
-<!-- オシロスコープ -->
 <div class="card">
   <h2>7. オシロスコープモード（リアルタイム）</h2>
   <div class="row">
@@ -132,9 +126,14 @@
 // ====== Audio Context & Globals ======
 let audioCtx=new (window.AudioContext||window.webkitAudioContext)();
 let mediaStream=null, recorder=null, recChunks=[], sourceNode=null;
-let sampleRate=audioCtx.sampleRate;
-document.getElementById('srVal').textContent=sampleRate;
-document.getElementById('spMsVal').textContent=(1000/sampleRate).toFixed(3);
+let sampleRate=audioCtx.sampleRate; // 表示用。録音後に buffer.sampleRate へ置換
+let data=new Float32Array(sampleRate*2); // 初期デモ波形
+for(let i=0;i<data.length;i++){ data[i]=Math.sin(2*Math.PI*440*i/sampleRate)*0.4; }
+
+// UI refs
+const srEl=document.getElementById('srVal');
+const spMsEl=document.getElementById('spMsVal');
+srEl.textContent=sampleRate; spMsEl.textContent=(1000/sampleRate).toFixed(3);
 
 // ====== Playback ======
 function stopSound(){ if(sourceNode){ try{sourceNode.stop()}catch(e){} sourceNode.disconnect(); sourceNode=null; } }
@@ -155,8 +154,7 @@ function playNoiseShort(){
   for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
   sourceNode=audioCtx.createBufferSource();
   sourceNode.buffer=buf; sourceNode.connect(audioCtx.destination);
-  sourceNode.start();
-  sourceNode.stop(audioCtx.currentTime + dur); // 明示停止
+  sourceNode.start(); sourceNode.stop(audioCtx.currentTime + dur);
 }
 function playNoise(){
   stopSound();
@@ -178,12 +176,17 @@ async function startRecording(){
     const blob=new Blob(recChunks);
     const arr=await blob.arrayBuffer();
     audioCtx.decodeAudioData(arr,buff=>{
+      // 重要：録音の実サンプルレートを採用
       data=buff.getChannelData(0);
+      sampleRate=buff.sampleRate;
+      srEl.textContent=sampleRate;
+      spMsEl.textContent=(1000/sampleRate).toFixed(3);
+
       viewStart=0; viewEnd=data.length;
-      drawWave();
+      drawWave(true); // 正規化を考慮して描画
       document.getElementById('recStatus').textContent="録音完了";
       btnZoomOut.disabled=false;
-      // release mic
+
       if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
     });
   };
@@ -196,18 +199,17 @@ function stopRecording(){
 btnRec.onclick=()=>{ startRecording(); btnRec.disabled=true; btnStopRec.disabled=false; };
 btnStopRec.onclick=()=>{ stopRecording(); btnRec.disabled=false; btnStopRec.disabled=true; };
 
-// ====== 録音→発音（ご希望の流れ） ======
+// 録音→発音
 btnPlayRec.onclick=async ()=>{
   await startRecording();
   const type=document.getElementById('soundType').value;
-  // 録音開始から50ms遅延して発音
   setTimeout(()=>{
     if(type==="impulse"){
       playImpulse();
-      setTimeout(()=>{ stopRecording(); }, 250); // 発音後200msぶん余裕
+      setTimeout(()=>{ stopRecording(); }, 250);
     }else{
       playNoiseShort();
-      setTimeout(()=>{ stopRecording(); }, 350); // 発音後300msぶん余裕
+      setTimeout(()=>{ stopRecording(); }, 350);
     }
   }, 50);
 };
@@ -217,41 +219,76 @@ const wave=document.getElementById('wave'); const wctx=wave.getContext('2d'); co
 const waveWrap=document.getElementById('waveWrap');
 const btnZoomOut=document.getElementById('btnZoomOut'); const btnResetPts=document.getElementById('btnResetPts');
 const ptAEl=document.getElementById('ptA'); const ptBEl=document.getElementById('ptB'); const dtMsEl=document.getElementById('dtMs');
-let data=new Float32Array(sampleRate*2); for(let i=0;i<data.length;i++){ data[i]=Math.sin(2*Math.PI*440*i/sampleRate)*0.4; }
-let viewStart=0, viewEnd=data.length;
+const chkNormalize=document.getElementById('chkNormalize');
 
-function drawWave(){
-  wctx.clearRect(0,0,W,H);
-  const N=viewEnd-viewStart; const step=Math.max(1, Math.floor(N/W)); const mid=H/2;
-  wctx.fillStyle='#fff'; wctx.fillRect(0,0,W,H);
-  wctx.strokeStyle='#1b84ff'; wctx.beginPath();
-  for(let x=0;x<W;x++){
-    const base=viewStart + x*step;
-    let min=1e9, max=-1e9;
-    for(let k=0;k<step;k++){ const v=data[base+k]||0; if(v<min)min=v; if(v>max)max=v; }
-    wctx.moveTo(x, mid*(1-min));
-    wctx.lineTo(x, mid*(1-max));
-  }
-  wctx.stroke();
-}
+let viewStart=0, viewEnd=data.length;
+let dragging=false,dragA=0,dragB=0;
 function clamp(x,a,b){return Math.max(a, Math.min(b,x));}
 function xToIndex(x){ const frac=clamp(x/W,0,1); return Math.floor(viewStart + frac*(viewEnd-viewStart)); }
 
-// ドラッグでズーム、クリックでマーカー
-let dragging=false,dragA=0,dragB=0;
+function drawWave(useNormalize){
+  wctx.clearRect(0,0,W,H);
+  if(!data || data.length===0) return;
+
+  const N=viewEnd-viewStart;
+  const step=Math.max(1, Math.floor(N/W)); // 1pxあたりのサンプル数
+  const mid=H/2;
+  const normalize = (useNormalize!==undefined) ? useNormalize : chkNormalize.checked;
+
+  // 可視範囲での最大振幅（正規化用）
+  let maxAbs=0;
+  if(normalize){
+    for(let i=viewStart;i<viewEnd;i++){ const a=Math.abs(data[i]); if(a>maxAbs) maxAbs=a; }
+    if(maxAbs<1e-9) maxAbs=1; // 無音対策
+  }else{
+    maxAbs=1;
+  }
+  const scale = (H*0.45)/maxAbs; // 余白を持たせて描画
+
+  wctx.fillStyle='#fff'; wctx.fillRect(0,0,W,H);
+  wctx.strokeStyle='#1b84ff'; wctx.beginPath();
+
+  if(step===1){
+    // 高倍率ズーム：生サンプルで折れ線
+    for(let x=0;x<N && x<W;x++){
+      const v=data[viewStart+x]*scale;
+      const y=mid - v;
+      if(x===0) wctx.moveTo(x,y); else wctx.lineTo(x,y);
+    }
+  }else{
+    // 低倍率：1px区間の最小/最大を描き、ピークを保護
+    for(let x=0;x<W;x++){
+      const i0=viewStart + x*step;
+      let vmin=1e9, vmax=-1e9;
+      for(let k=0;k<step;k++){
+        const v=(data[i0+k]||0);
+        if(v<vmin) vmin=v;
+        if(v>vmax) vmax=v;
+      }
+      const y1=mid - vmax*scale, y2=mid - vmin*scale;
+      wctx.moveTo(x,y1); wctx.lineTo(x,y2);
+    }
+  }
+  wctx.stroke();
+}
+chkNormalize.addEventListener('change',()=>drawWave());
+
 wave.addEventListener('mousedown',e=>{dragging=true; dragA=e.offsetX; dragB=e.offsetX; drawWave(); shadeSel();});
 wave.addEventListener('mousemove',e=>{ if(dragging){ dragB=e.offsetX; drawWave(); shadeSel(); } });
 wave.addEventListener('mouseup',e=>{
   if(!dragging) return; dragging=false;
   const a=Math.min(dragA,dragB), b=Math.max(dragA,dragB);
-  if(Math.abs(b-a)>6 && data){
+  if(Math.abs(b-a)>6 && data && data.length>0){
     const iA=xToIndex(a), iB=xToIndex(b);
     viewStart=iA; viewEnd=iB; drawWave(); btnZoomOut.disabled=false;
   }else{
     placeMarker(xToIndex(e.offsetX), e.offsetX);
   }
 });
-function shadeSel(){ const a=Math.min(dragA,dragB), b=Math.max(dragA,dragB); wctx.fillStyle='rgba(255,200,0,.22)'; wctx.fillRect(a,0,b-a,H); }
+function shadeSel(){
+  const a=Math.min(dragA,dragB), b=Math.max(dragA,dragB);
+  wctx.fillStyle='rgba(255,200,0,.22)'; wctx.fillRect(a,0,b-a,H);
+}
 btnZoomOut.onclick=()=>{ viewStart=0; viewEnd=data.length; drawWave(); btnZoomOut.disabled=true; };
 
 // マーカー
@@ -284,7 +321,7 @@ btnCalc.onclick=()=>{
 
 // ====== FFT on recorded data ======
 btnFFT.onclick=()=>{
-  if(!data) return;
+  if(!data || data.length===0) return;
   const N=Math.min(4096, viewEnd-viewStart);
   const seg=data.slice(viewStart, viewStart+N);
   const re=new Float32Array(N), im=new Float32Array(N);
@@ -311,7 +348,7 @@ btnFFT.onclick=()=>{
   document.getElementById('peaks').textContent=peaks.slice(0,5).map(p=>p.f.toFixed(1)+'Hz').join(', ');
 };
 
-// Cooley–Tukey FFT
+// Cooley–Tukey FFT（再帰）
 function fft(re,im){
   const N=re.length; if(N<=1) return;
   const reE=new Float32Array(N/2), imE=new Float32Array(N/2);
@@ -319,8 +356,7 @@ function fft(re,im){
   for(let i=0;i<N/2;i++){ reE[i]=re[i*2]; imE[i]=im[i*2]; reO[i]=re[i*2+1]; imO[i]=im[i*2+1]; }
   fft(reE,imE); fft(reO,imO);
   for(let k=0;k<N/2;k++){
-    const ang=-2*Math.PI*k/N;
-    const c=Math.cos(ang), s=Math.sin(ang);
+    const ang=-2*Math.PI*k/N, c=Math.cos(ang), s=Math.sin(ang);
     const tr=c*reO[k]-s*imO[k], ti=s*reO[k]+c*imO[k];
     re[k]=reE[k]+tr; im[k]=imE[k]+ti;
     re[k+N/2]=reE[k]-tr; im[k+N/2]=imE[k]-ti;
@@ -328,10 +364,8 @@ function fft(re,im){
 }
 
 // ====== Oscilloscope (real-time) ======
-const scopeCanvas=document.getElementById('scopeCanvas');
-const scopeCtx=scopeCanvas.getContext('2d');
-const scopeFFTCanvas=document.getElementById('scopeFFT');
-const scopeFFTCtx=scopeFFTCanvas.getContext('2d');
+const scopeCanvas=document.getElementById('scopeCanvas'); const scopeCtx=scopeCanvas.getContext('2d');
+const scopeFFTCanvas=document.getElementById('scopeFFT'); const scopeFFTCtx=scopeFFTCanvas.getContext('2d');
 let scopeStream=null, scopeSource=null, analyserScope=null, scopeData=null, scopeFreq=null, scopeAnim=null;
 
 async function startScope(){
@@ -364,8 +398,7 @@ function drawScope(){
   const barW=scopeFFTCanvas.width/scopeFreq.length;
   scopeFFTCtx.fillStyle="#0a0";
   for(let i=0;i<scopeFreq.length;i++){
-    const val=scopeFreq[i]/255;
-    const h=val*scopeFFTCanvas.height;
+    const h=(scopeFreq[i]/255)*scopeFFTCanvas.height;
     scopeFFTCtx.fillRect(i*barW, scopeFFTCanvas.height-h, barW, h);
   }
 }
@@ -379,8 +412,8 @@ function stopScope(){
 btnScopeStart.onclick=startScope;
 btnScopeStop.onclick=stopScope;
 
-// 初期描画（デモ波形）
-drawWave();
+// 初期描画
+drawWave(true);
 </script>
 </body>
 </html>
