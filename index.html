@@ -73,8 +73,9 @@
           <option value="noiseShort">ホワイトノイズ（短時間）</option>
         </select>
       </label>
-      <button id="btnPlayRec" class="btn-action">発音＋録音</button>
+      <button id="btnPlayRec" class="btn-action">録音→発音</button>
     </div>
+    <div class="note">録音開始→50ms待機→発音→余裕を持って自動停止</div>
   </div>
 </div>
 
@@ -128,30 +129,33 @@
 </div>
 
 <script>
+// ====== Audio Context & Globals ======
 let audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-let mediaStream,recorder,recChunks=[],sourceNode;
+let mediaStream=null, recorder=null, recChunks=[], sourceNode=null;
 let sampleRate=audioCtx.sampleRate;
 document.getElementById('srVal').textContent=sampleRate;
 document.getElementById('spMsVal').textContent=(1000/sampleRate).toFixed(3);
 
-// ===== Playback =====
-function stopSound(){ if(sourceNode){sourceNode.stop(); sourceNode.disconnect(); sourceNode=null;} }
+// ====== Playback ======
+function stopSound(){ if(sourceNode){ try{sourceNode.stop()}catch(e){} sourceNode.disconnect(); sourceNode=null; } }
 function playImpulse(){
   stopSound();
   const buf=audioCtx.createBuffer(1, sampleRate, sampleRate);
   const d=buf.getChannelData(0);
-  d[0]=1.0; // 単一サンプル
+  d[0]=1.0; // 単一サンプルの鋭いクリック
   sourceNode=audioCtx.createBufferSource();
   sourceNode.buffer=buf; sourceNode.connect(audioCtx.destination); sourceNode.start();
 }
 function playNoiseShort(){
   stopSound();
   const dur=0.1; // 100ms
-  const buf=audioCtx.createBuffer(1, sampleRate, Math.max(1, Math.floor(sampleRate*dur)));
+  const len=Math.max(1, Math.floor(sampleRate*dur));
+  const buf=audioCtx.createBuffer(1, sampleRate, len);
   const d=buf.getChannelData(0);
-  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
   sourceNode=audioCtx.createBufferSource();
-  sourceNode.buffer=buf; sourceNode.connect(audioCtx.destination); sourceNode.start();
+  sourceNode.buffer=buf; sourceNode.connect(audioCtx.destination);
+  sourceNode.start();
   sourceNode.stop(audioCtx.currentTime + dur); // 明示停止
 }
 function playNoise(){
@@ -164,7 +168,7 @@ function playNoise(){
 }
 btnImpulse.onclick=playImpulse; btnNoiseShort.onclick=playNoiseShort; btnNoise.onclick=playNoise; btnStop.onclick=stopSound;
 
-// ===== Recording (to analyze later) =====
+// ====== Recording ======
 async function startRecording(){
   mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
   recorder=new MediaRecorder(mediaStream);
@@ -179,27 +183,36 @@ async function startRecording(){
       drawWave();
       document.getElementById('recStatus').textContent="録音完了";
       btnZoomOut.disabled=false;
+      // release mic
+      if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
     });
   };
   recorder.start();
   document.getElementById('recStatus').textContent="録音中…";
 }
 function stopRecording(){
-  if(recorder){recorder.stop(); document.getElementById('recStatus').textContent="停止";}
-  if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); }
+  if(recorder && recorder.state!=="inactive"){ recorder.stop(); document.getElementById('recStatus').textContent="停止"; }
 }
-btnRec.onclick=()=>{startRecording(); btnRec.disabled=true; btnStopRec.disabled=false;};
-btnStopRec.onclick=()=>{stopRecording(); btnRec.disabled=false; btnStopRec.disabled=true;};
+btnRec.onclick=()=>{ startRecording(); btnRec.disabled=true; btnStopRec.disabled=false; };
+btnStopRec.onclick=()=>{ stopRecording(); btnRec.disabled=false; btnStopRec.disabled=true; };
 
-// 発音＋録音
+// ====== 録音→発音（ご希望の流れ） ======
 btnPlayRec.onclick=async ()=>{
   await startRecording();
   const type=document.getElementById('soundType').value;
-  if(type==="impulse"){ playImpulse(); setTimeout(stopRecording,200); }
-  else { playNoiseShort(); setTimeout(stopRecording,300); }
+  // 録音開始から50ms遅延して発音
+  setTimeout(()=>{
+    if(type==="impulse"){
+      playImpulse();
+      setTimeout(()=>{ stopRecording(); }, 250); // 発音後200msぶん余裕
+    }else{
+      playNoiseShort();
+      setTimeout(()=>{ stopRecording(); }, 350); // 発音後300msぶん余裕
+    }
+  }, 50);
 };
 
-// ===== Waveform / Zoom / Markers =====
+// ====== Waveform / Zoom / Markers ======
 const wave=document.getElementById('wave'); const wctx=wave.getContext('2d'); const W=wave.width,H=wave.height;
 const waveWrap=document.getElementById('waveWrap');
 const btnZoomOut=document.getElementById('btnZoomOut'); const btnResetPts=document.getElementById('btnResetPts');
@@ -259,7 +272,7 @@ function placeMarker(i,x){
   btnResetPts.disabled=false;
 }
 
-// ===== Speed of sound =====
+// ====== Speed of sound ======
 btnCalc.onclick=()=>{
   if(pointA!=null && pointB!=null){
     const dt=Math.abs(pointB-pointA)/sampleRate;
@@ -269,7 +282,7 @@ btnCalc.onclick=()=>{
   }
 };
 
-// ===== FFT on recorded data =====
+// ====== FFT on recorded data ======
 btnFFT.onclick=()=>{
   if(!data) return;
   const N=Math.min(4096, viewEnd-viewStart);
@@ -298,7 +311,7 @@ btnFFT.onclick=()=>{
   document.getElementById('peaks').textContent=peaks.slice(0,5).map(p=>p.f.toFixed(1)+'Hz').join(', ');
 };
 
-// Cooley–Tukey (recursive) - naive but fine for N<=4096
+// Cooley–Tukey FFT
 function fft(re,im){
   const N=re.length; if(N<=1) return;
   const reE=new Float32Array(N/2), imE=new Float32Array(N/2);
@@ -314,7 +327,7 @@ function fft(re,im){
   }
 }
 
-// ===== Oscilloscope (real-time) =====
+// ====== Oscilloscope (real-time) ======
 const scopeCanvas=document.getElementById('scopeCanvas');
 const scopeCtx=scopeCanvas.getContext('2d');
 const scopeFFTCanvas=document.getElementById('scopeFFT');
@@ -366,7 +379,7 @@ function stopScope(){
 btnScopeStart.onclick=startScope;
 btnScopeStop.onclick=stopScope;
 
-// 初期描画
+// 初期描画（デモ波形）
 drawWave();
 </script>
 </body>
