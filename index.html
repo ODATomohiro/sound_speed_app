@@ -3,459 +3,238 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>管内の音波を調べる（インパルス＆ホワイトノイズ）</title>
+<title>音波解析</title>
 <style>
-  :root { --ink:#111; --muted:#57606a; --brand:#0d6efd; --bg:#f8f9fb;}
-  html,body{margin:0}
-  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:var(--bg); padding:18px;}
-  h1{font-size:clamp(20px,3vw,28px); margin:0 0 8px}
-  .row{display:flex; flex-wrap:wrap; gap:12px;}
-  .card{background:#fff; border:1px solid #e6e8eb; border-radius:14px; padding:14px 16px; box-shadow:0 2px 6px rgba(0,0,0,.05);}
-  .card h2{font-size:18px; margin:0 0 10px}
-  .tiny{font-size:12px; color:var(--muted)}
-  .controls button, .controls input, .controls select { margin:4px 6px 4px 0; }
-  button{background:var(--brand); color:#fff; border:none; border-radius:8px; padding:8px 12px; cursor:pointer}
-  button[disabled]{opacity:.5; cursor:not-allowed}
-  input[type="number"]{padding:6px 8px; border:1px solid #d0d7de; border-radius:8px}
-  #waveWrap{position:relative; width:min(100%, 1000px);}
-  #wave{width:100%; height:220px; display:block; background:#fff; border:1px solid #e6e8eb; border-radius:10px;}
-  .marker{position:absolute; top:0; width:2px; height:220px;}
+  body{font-family:'Segoe UI',sans-serif;background:#f0f2f5;margin:0;padding:20px;color:#333;}
+  h1{margin:0 0 16px;font-size:1.6em;color:#222;}
+  h2{margin-top:0;font-size:1.1em;color:#444;}
+  .card{background:#fff;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);padding:16px 20px;margin-bottom:20px;}
+  button{margin:4px;padding:6px 12px;border:none;border-radius:8px;font-size:0.9em;cursor:pointer;transition:background 0.2s;color:#fff;}
+  button:disabled{background:#ccc;cursor:default;color:#fff;}
+  .btn-impulse{background:#ff6a00;} .btn-impulse:hover{background:#cc5500;}
+  .btn-noise{background:#28a745;} .btn-noise:hover{background:#1e7e34;}
+  .btn-stop{background:#dc3545;} .btn-stop:hover{background:#a71d2a;}
+  .btn-rec{background:#dc3545;} .btn-rec:hover{background:#a71d2a;}
+  .btn-stoprec{background:#6c757d;} .btn-stoprec:hover{background:#565e64;}
+  .btn-action{background:#1b84ff;} .btn-action:hover{background:#1059aa;}
+  input[type=number]{width:80px;padding:4px 6px;border:1px solid #ccc;border-radius:6px;}
+  select{padding:4px 6px;border-radius:6px;border:1px solid #ccc;}
+  #waveWrap{position:relative;width:min(100%,1000px);margin-top:8px;}
+  #wave{width:100%;height:240px;display:block;background:#fff;border:1px solid #ddd;border-radius:12px;}
+  .marker{position:absolute;top:0;width:2px;height:240px;}
   .marker.a{background:#ff6a00}
   .marker.b{background:#1b84ff}
-  .badge{display:inline-block; margin-left:8px; background:#eef6ff; color:#084298; padding:3px 8px; border-radius:999px; border:1px solid #cfe2ff; font-size:12px}
-  .pill{display:inline-block; padding:2px 8px; border-radius:999px; background:#f1f3f5; font-size:12px}
-  .grid2{display:grid; grid-template-columns: 1fr 1fr; gap:12px; align-items:start}
-  canvas#spec{width:min(100%,1000px); height:220px; display:block; background:#fff; border:1px solid #e6e8eb; border-radius:10px;}
-  .help{margin-top:6px}
-  ol{margin:6px 0 0 18px}
+  canvas.spectrum{width:100%;height:200px;display:block;border:1px solid #ddd;border-radius:12px;margin-top:8px;}
+  .badge{display:inline-block;margin-top:8px;background:#eef;padding:4px 8px;border-radius:8px;font-size:0.85em;color:#333;}
+  .split{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;}
+  .block{flex:1;min-width:240px;}
 </style>
 </head>
 <body>
-  <h1>管内の音波を調べる（インパルス & ホワイトノイズ）</h1>
-  <div class="tiny">スピーカーで音を入れて、マイクで録音。波形のズーム・2点測定・音速計算・FFTまでオールインワン。</div>
+<h1>音波解析</h1>
 
-  <div class="row">
-    <section class="card" style="flex:1 1 360px; min-width:320px;">
-      <h2>1) 発音（スピーカー出力）</h2>
-      <div class="controls">
-        <button id="btnImpulse">インパルス再生（クリック）</button>
-        <button id="btnNoiseStart">ホワイトノイズ開始</button>
-        <button id="btnNoiseStop" disabled>停止</button>
-        <label class="pill"><input type="checkbox" id="noisePink"> ピンクっぽく</label>
-        <span class="tiny">音量はPC側で調整</span>
-      </div>
-      <div class="help tiny">
-        ・スピーカーは管の開口から数cmの位置に置き、密着させないでください。<br>
-        ・ホワイトノイズは 0–20 kHz を含む擬似信号です。スペクトル観察に使います。
-      </div>
-    </section>
-
-    <section class="card" style="flex:1 1 360px; min-width:320px;">
-      <h2>2) 録音</h2>
-      <div class="controls">
-        <button id="btnRec">録音開始</button>
-        <button id="btnStopRec" disabled>停止</button>
-        <select id="micSelect"></select>
-        <span class="badge">SR: <span id="srVal">—</span> Hz / 1sample ≈ <span id="spMs">—</span> ms</span>
-      </div>
-      <div class="tiny">※マイクは管の口から4–5 cm内部（またはフタ付近）に配置。</div>
-    </section>
+<div class="card split">
+  <div class="block">
+    <h2>1. 再生</h2>
+    <div>
+      <button id="btnImpulse" class="btn-impulse">インパルス</button>
+      <button id="btnNoiseShort" class="btn-noise">ノイズ短</button>
+      <button id="btnNoise" class="btn-noise">ノイズ連続</button>
+      <button id="btnStop" class="btn-stop">停止</button>
+    </div>
   </div>
+  <div class="block">
+    <h2>2. 録音</h2>
+    <div>
+      <button id="btnRec" class="btn-rec">録音開始</button>
+      <button id="btnStopRec" class="btn-stoprec" disabled>録音停止</button>
+    </div>
+    <span id="recStatus">未録音</span>
+  </div>
+  <div class="block">
+    <h2>3. 発音＋録音</h2>
+    <label>音の種類:
+      <select id="soundType">
+        <option value="impulse">インパルス</option>
+        <option value="noiseShort">ホワイトノイズ（短時間）</option>
+      </select>
+    </label>
+    <div>
+      <button id="btnPlayRec" class="btn-action">発音＋録音</button>
+    </div>
+  </div>
+</div>
 
-  <section class="card" style="margin-top:12px;">
-    <h2>3) 波形表示・測定</h2>
-    <div id="waveWrap">
-      <canvas id="wave" width="1000" height="220"></canvas>
-      <!-- markers injected here -->
-    </div>
-    <div class="controls">
-      <button id="btnZoomOut" disabled>全体表示</button>
-      <button id="btnResetPts" disabled>測定点リセット</button>
-      <span class="pill">点A: <span id="ptA">—</span> ms</span>
-      <span class="pill">点B: <span id="ptB">—</span> ms</span>
-      <span class="pill">Δt: <span id="dtMs">—</span> ms</span>
-    </div>
-    <div class="grid2">
-      <div>
-        <label>管の長さ L [m]: <input type="number" id="tubeLen" value="1.00" step="0.01" min="0.1"></label>
-        <div class="controls">
-          <label class="pill"><input type="radio" name="model" value="round" checked> 端で反射（往復Δt） → c = 2L / Δt</label><br>
-          <label class="pill"><input type="radio" name="model" value="oneway"> 片道Δt既知 → c = L / Δt</label>
-        </div>
-        <div class="controls">
-          <button id="btnComputeC">音速を計算</button>
-          <span class="pill">c ≈ <span id="cVal">—</span> m/s</span>
-        </div>
-      </div>
-      <div>
-        <div class="tiny">操作：</div>
-        <ol class="tiny">
-          <li>キャンバスをドラッグで範囲選択 → ズーム</li>
-          <li>クリックで A / B を打ち、Δt(ms) を確認</li>
-          <li>「全体表示」でフルに戻る</li>
-        </ol>
-      </div>
-    </div>
-  </section>
+<div class="card">
+  <h2>波形表示</h2>
+  <div id="waveWrap">
+    <canvas id="wave" width="1000" height="240"></canvas>
+  </div>
+  <div style="margin-top:6px;">
+    <button id="btnZoomOut" class="btn-action" disabled>全体表示</button>
+    <button id="btnResetPts" class="btn-action" disabled>測定点リセット</button>
+    <span>点A: <span id="ptA">—</span> ms</span> /
+    <span>点B: <span id="ptB">—</span> ms</span> /
+    <span>Δt: <span id="dtMs">—</span> ms</span>
+  </div>
+  <div class="badge">サンプリングレート: <span id="srVal">—</span> Hz ／ 1サンプル ≈ <span id="spMsVal">—</span> ms</div>
+</div>
 
-  <section class="card" style="margin-top:12px;">
-    <h2>4) スペクトル（選択区間のFFT）</h2>
-    <div class="controls">
-      <label>解析窓 [ms]: <input type="number" id="fftWinMs" value="500" min="50" max="5000" step="10"></label>
-      <label>サイズ: 
-        <select id="fftSize">
-          <option>2048</option><option>4096</option><option selected>8192</option><option>16384</option>
-        </select>
-      </label>
-      <button id="btnFFT">スペクトル解析</button>
-      <span class="tiny">（0–2000 Hzを主に観察）</span>
-    </div>
-    <canvas id="spec" width="1000" height="220"></canvas>
-    <div class="controls tiny" id="peaks"></div>
-  </section>
+<div class="card">
+  <h2>音速計算</h2>
+  <label>管長 L [m]: <input id="tubeLen" type="number" step="0.01" value="1.00"></label>
+  <button id="btnCalc" class="btn-action">計算</button>
+  <div style="margin-top:6px;">片道: <span id="c1">—</span> m/s ／ 往復: <span id="c2">—</span> m/s</div>
+</div>
+
+<div class="card">
+  <h2>FFTスペクトル</h2>
+  <button id="btnFFT" class="btn-action">スペクトル解析</button>
+  <canvas id="spectrum" class="spectrum" width="1000" height="200"></canvas>
+  <div style="margin-top:6px;">ピーク周波数: <span id="peaks">—</span></div>
+</div>
 
 <script>
-let audioCtx;
-let mediaStream, mediaRec;
-let chunks = [];
-let micSelect = document.getElementById('micSelect');
-let srVal = document.getElementById('srVal');
-let spMs = document.getElementById('spMs');
-let btnRec = document.getElementById('btnRec');
-let btnStopRec = document.getElementById('btnStopRec');
-let btnImpulse = document.getElementById('btnImpulse');
-let btnNoiseStart = document.getElementById('btnNoiseStart');
-let btnNoiseStop = document.getElementById('btnNoiseStop');
-let noisePink = document.getElementById('noisePink');
+let audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+let mediaStream,recorder,recChunks=[],sourceNode;
+let sampleRate=audioCtx.sampleRate;
+document.getElementById('srVal').textContent=sampleRate;
+document.getElementById('spMsVal').textContent=(1000/sampleRate).toFixed(3);
 
-let wave = document.getElementById('wave');
-let spec = document.getElementById('spec');
-let W = wave.width, H = wave.height;
-let waveWrap = document.getElementById('waveWrap');
-
-let btnZoomOut = document.getElementById('btnZoomOut');
-let btnResetPts = document.getElementById('btnResetPts');
-let ptAEl = document.getElementById('ptA');
-let ptBEl = document.getElementById('ptB');
-let dtMsEl = document.getElementById('dtMs');
-
-let tubeLen = document.getElementById('tubeLen');
-let btnComputeC = document.getElementById('btnComputeC');
-let cVal = document.getElementById('cVal');
-
-let btnFFT = document.getElementById('btnFFT');
-let fftWinMs = document.getElementById('fftWinMs');
-let fftSizeSel = document.getElementById('fftSize');
-let peaksEl = document.getElementById('peaks');
-
-let buffer = null; // AudioBuffer (録音後)
-let data = null;   // Float32Array (mono)
-let sampleRate = 0;
-
-// ==== Utility ====
-function hann(N){
-  const w = new Float32Array(N);
-  for (let n=0;n<N;n++){ w[n]=0.5*(1-Math.cos(2*Math.PI*n/(N-1))); }
-  return w;
-}
-function clamp(x,a,b){return Math.max(a, Math.min(b,x));}
-
-// ==== Audio init ====
-async function ensureAudio(){
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  }
-  sampleRate = audioCtx.sampleRate;
-  srVal.textContent = sampleRate;
-  spMs.textContent = (1000/sampleRate).toFixed(3);
-}
-
-// ==== Output: Impulse & Noise ====
-let noiseNode=null, noiseGain=null;
+// ===== Playback functions =====
 function playImpulse(){
-  ensureAudio();
-  // 1 sample spike
-  const buf = audioCtx.createBuffer(1, Math.round(sampleRate*0.01), sampleRate);
-  const ch = buf.getChannelData(0);
-  ch[0]=1.0; // spike
-  const src = audioCtx.createBufferSource();
-  src.buffer = buf;
-  src.connect(audioCtx.destination);
-  src.start();
-}
-function startNoise(){
-  ensureAudio();
-  stopNoise();
-  const workSize = 1024;
-  const node = audioCtx.createScriptProcessor(workSize, 1,1);
-  let lastOut = 0;
-  node.onaudioprocess = e=>{
-    const out = e.outputBuffer.getChannelData(0);
-    for (let i=0;i<out.length;i++){
-      let v = Math.random()*2-1; // white
-      if (noisePink.checked){
-        lastOut = 0.98*lastOut + 0.02*v; // pink-ish
-        v = lastOut;
-      }
-      out[i]=v*0.5;
-    }
-  };
-  noiseGain = audioCtx.createGain();
-  noiseGain.gain.value = 0.5;
-  node.connect(noiseGain).connect(audioCtx.destination);
-  noiseNode = node;
-  btnNoiseStart.disabled=true; btnNoiseStop.disabled=false;
-}
-function stopNoise(){
-  if (noiseNode){ noiseNode.disconnect(); noiseNode.onaudioprocess=null; noiseNode=null; }
-  if (noiseGain){ noiseGain.disconnect(); noiseGain=null; }
-  btnNoiseStart.disabled=false; btnNoiseStop.disabled=true;
+  stopSound();
+  let buf=audioCtx.createBuffer(1,sampleRate,sampleRate);
+  let d=buf.getChannelData(0);
+  d[0]=1.0;  // 単一サンプルだけのインパルス
+  sourceNode=audioCtx.createBufferSource();
+  sourceNode.buffer=buf;
+  sourceNode.connect(audioCtx.destination);
+  sourceNode.start();
 }
 
-// ==== Recording ====
-async function refreshDevices(){
-  const devs = await navigator.mediaDevices.enumerateDevices();
-  const mics = devs.filter(d=>d.kind==='audioinput');
-  micSelect.innerHTML='';
-  mics.forEach(d=>{
-    const opt=document.createElement('option');
-    opt.value=d.deviceId; opt.textContent=d.label||('Microphone '+(micSelect.length+1));
-    micSelect.appendChild(opt);
-  });
-}
-async function startRec(){
-  await ensureAudio();
-  if (mediaRec && mediaRec.state==='recording') return;
-  const constraints = { audio: { deviceId: micSelect.value?{exact:micSelect.value}:undefined, channelCount:1, echoCancellation:false, noiseSuppression:false } };
-  mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-  mediaRec = new MediaRecorder(mediaStream);
-  chunks.length=0;
-  mediaRec.ondataavailable = e=>{ if (e.data.size>0) chunks.push(e.data); };
-  mediaRec.onstop = async ()=>{
-    const blob = new Blob(chunks, {type: chunks[0]?.type || 'audio/webm'});
-    const ab = await blob.arrayBuffer();
-    buffer = await audioCtx.decodeAudioData(ab);
-    sampleRate = buffer.sampleRate;
-    srVal.textContent = sampleRate;
-    spMs.textContent = (1000/sampleRate).toFixed(3);
-    data = buffer.getChannelData(0).slice(); // copy
-    viewStart = 0; viewEnd = data.length;
-    drawWave();
-    btnZoomOut.disabled = true;
-    btnResetPts.disabled = false;
-  };
-  mediaRec.start();
-  btnRec.disabled=true; btnStopRec.disabled=false;
-}
-function stopRec(){
-  if (mediaRec && mediaRec.state==='recording'){ mediaRec.stop(); }
-  mediaStream && mediaStream.getTracks().forEach(t=>t.stop());
-  btnRec.disabled=false; btnStopRec.disabled=true;
+function playNoiseShort(){
+  stopSound();
+  let dur=0.1; // 100ms
+  let buf=audioCtx.createBuffer(1,sampleRate, sampleRate*dur);
+  let d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  sourceNode=audioCtx.createBufferSource();
+  sourceNode.buffer=buf;
+  sourceNode.connect(audioCtx.destination);
+  sourceNode.start();
+  sourceNode.stop(audioCtx.currentTime+dur); // 100msで停止
 }
 
-// ==== Waveform draw & zoom ====
-let viewStart = 0, viewEnd = 0;
-let dragging=false, dragA=0, dragB=0;
-const ctx = wave.getContext('2d');
+function playNoise(){
+  stopSound();
+  let buf=audioCtx.createBuffer(1,sampleRate,sampleRate*2);
+  let d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
+  sourceNode=audioCtx.createBufferSource();
+  sourceNode.buffer=buf;
+  sourceNode.loop=true;
+  sourceNode.connect(audioCtx.destination);
+  sourceNode.start();
+}
+function stopSound(){ if(sourceNode){sourceNode.stop(); sourceNode.disconnect(); sourceNode=null;}}
+btnImpulse.onclick=playImpulse; btnNoiseShort.onclick=playNoiseShort; btnNoise.onclick=playNoise; btnStop.onclick=stopSound;
+
+// ===== Recording =====
+async function startRecording(){
+  mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  recorder=new MediaRecorder(mediaStream);
+  recChunks=[];
+  recorder.ondataavailable=e=>recChunks.push(e.data);
+  recorder.onstop=async ()=>{
+    let blob=new Blob(recChunks); let arr=await blob.arrayBuffer();
+    audioCtx.decodeAudioData(arr,buff=>{ data=buff.getChannelData(0); viewStart=0; viewEnd=data.length; drawWave(); document.getElementById('recStatus').textContent="録音完了"; });
+  };
+  recorder.start(); document.getElementById('recStatus').textContent="録音中…";
+}
+function stopRecording(){if(recorder){recorder.stop(); document.getElementById('recStatus').textContent="停止";}}
+btnRec.onclick=()=>{startRecording();btnRec.disabled=true;btnStopRec.disabled=false;};
+btnStopRec.onclick=()=>{stopRecording();btnRec.disabled=false;btnStopRec.disabled=true;};
+
+// 発音＋録音（インパルス=200ms録音、ノイズ短=300ms録音）
+btnPlayRec.onclick=async ()=>{
+  await startRecording();
+  let type=document.getElementById('soundType').value;
+  if(type==="impulse"){ playImpulse(); setTimeout(stopRecording,200); }
+  else { playNoiseShort(); setTimeout(stopRecording,300); }
+};
+
+// ===== Waveform + zoom + markers + FFT =====
+let wave=document.getElementById('wave'); let ctx=wave.getContext('2d'); let W=wave.width,H=wave.height;
+let waveWrap=document.getElementById('waveWrap');
+let btnZoomOut=document.getElementById('btnZoomOut'); let btnResetPts=document.getElementById('btnResetPts');
+let ptAEl=document.getElementById('ptA'); let ptBEl=document.getElementById('ptB'); let dtMsEl=document.getElementById('dtMs');
+let data=new Float32Array(sampleRate*2); for(let i=0;i<data.length;i++){data[i]=Math.sin(2*Math.PI*440*i/sampleRate)*0.5;}
+let viewStart=0,viewEnd=data.length;
+
 function drawWave(){
   ctx.clearRect(0,0,W,H);
-  if (!data) { ctx.fillStyle='#999'; ctx.fillText('録音するとここに波形が表示されます', 12, 20); return; }
-  const N = viewEnd - viewStart;
-  const step = Math.max(1, Math.floor(N / W));
-  const amp = H/2;
-  ctx.fillStyle='#0d6efd22';
-  ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#0d6efd'; ctx.lineWidth=1; ctx.beginPath();
-  for (let x=0; x<W; x++){
-    const i0 = viewStart + x*step;
-    let min= 1e9, max=-1e9;
-    for (let k=0;k<step;k++){
-      const v = data[i0+k]||0;
-      if (v<min) min=v; if (v>max) max=v;
-    }
-    ctx.moveTo(x, amp*(1-min));
-    ctx.lineTo(x, amp*(1-max));
+  const N=viewEnd-viewStart; const step=Math.max(1,Math.floor(N/W)); const amp=H/2;
+  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#1b84ff'; ctx.beginPath();
+  for(let x=0;x<W;x++){
+    const i0=viewStart+x*step; let min=1e9,max=-1e9;
+    for(let k=0;k<step;k++){ const v=data[i0+k]||0; if(v<min)min=v; if(v>max)max=v;}
+    ctx.moveTo(x,amp*(1-min)); ctx.lineTo(x,amp*(1-max));
   }
   ctx.stroke();
-  // grid line center
-  ctx.strokeStyle='#aaa'; ctx.lineWidth=0.5;
-  ctx.beginPath(); ctx.moveTo(0,amp); ctx.lineTo(W,amp); ctx.stroke();
 }
-function xToIndex(x){
-  const frac = clamp(x/W,0,1);
-  const i = Math.floor(viewStart + frac*(viewEnd-viewStart));
-  return i;
-}
-wave.addEventListener('mousedown', e=>{ dragging=true; dragA=e.offsetX; dragB=e.offsetX; drawWave(); shadeSel(); });
-wave.addEventListener('mousemove', e=>{ if(dragging){ dragB=e.offsetX; drawWave(); shadeSel(); } });
-wave.addEventListener('mouseup', e=>{
-  if (!dragging) return;
-  dragging=false;
-  const a = Math.min(dragA, dragB), b=Math.max(dragA, dragB);
-  if (Math.abs(b-a)>6 && data){
-    const iA = xToIndex(a), iB = xToIndex(b);
-    viewStart = iA; viewEnd = iB;
-    drawWave();
-    btnZoomOut.disabled=false;
-  } else {
-    // treat as click for markers
-    const i = xToIndex(e.offsetX);
-    placeMarker(i, e.offsetX);
+function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+function xToIndex(x){const frac=clamp(x/W,0,1); return Math.floor(viewStart+frac*(viewEnd-viewStart));}
+
+// zoom selection
+let dragging=false,dragA=0,dragB=0;
+wave.addEventListener('mousedown',e=>{dragging=true;dragA=e.offsetX;dragB=e.offsetX;drawWave();shadeSel();});
+wave.addEventListener('mousemove',e=>{if(dragging){dragB=e.offsetX;drawWave();shadeSel();}});
+wave.addEventListener('mouseup',e=>{
+  if(!dragging)return; dragging=false;
+  const a=Math.min(dragA,dragB), b=Math.max(dragA,dragB);
+  if(Math.abs(b-a)>6&&data){
+    const iA=xToIndex(a),iB=xToIndex(b);
+    viewStart=iA; viewEnd=iB; drawWave(); btnZoomOut.disabled=false;
   }
 });
-function shadeSel(){
-  const a = Math.min(dragA, dragB), b=Math.max(dragA, dragB);
-  const g = ctx.createLinearGradient(a,0,b,0);
-  g.addColorStop(0,'rgba(255,193,7,.25)'); g.addColorStop(1,'rgba(255,193,7,.15)');
-  ctx.fillStyle=g; ctx.fillRect(a,0,b-a,H);
-}
-btnZoomOut.addEventListener('click', ()=>{ if(!data) return; viewStart=0; viewEnd=data.length; drawWave(); btnZoomOut.disabled=true; });
+function shadeSel(){const a=Math.min(dragA,dragB),b=Math.max(dragA,dragB); ctx.fillStyle='rgba(255,200,0,0.2)'; ctx.fillRect(a,0,b-a,H);}
+btnZoomOut.onclick=()=>{viewStart=0;viewEnd=data.length;drawWave();btnZoomOut.disabled=true;};
 
-// ==== Two-point measurement ====
-let pointA = null, pointB = null;
-function clearMarkers(){
-  Array.from(document.querySelectorAll('.marker')).forEach(el=>el.remove());
-  pointA = pointB = null;
-  ptAEl.textContent='—'; ptBEl.textContent='—'; dtMsEl.textContent='—';
-}
-btnResetPts.addEventListener('click', clearMarkers);
+// markers
+let pointA=null,pointB=null;
+function clearMarkers(){Array.from(document.querySelectorAll('.marker')).forEach(el=>el.remove());pointA=pointB=null;ptAEl.textContent='—';ptBEl.textContent='—';dtMsEl.textContent='—';}
+btnResetPts.onclick=clearMarkers;
+function placeMarker(i,x){const t_ms=(i/sampleRate)*1000; const div=document.createElement('div');
+  if(pointA===null){pointA=i;div.className='marker a';ptAEl.textContent=t_ms.toFixed(3);}
+  else if(pointB===null){pointB=i;div.className='marker b';ptBEl.textContent=t_ms.toFixed(3); const dt=Math.abs(pointB-pointA)/sampleRate*1000;dtMsEl.textContent=dt.toFixed(3);}
+  else{clearMarkers();placeMarker(i,x);return;}
+  div.style.left=Math.round(x)+'px';waveWrap.appendChild(div);btnResetPts.disabled=false;}
 
-function placeMarker(i, x){
-  if (!data) return;
-  const t_ms = (i / sampleRate) * 1000;
-  const div = document.createElement('div');
-  if (pointA === null){
-    pointA = i;
-    div.className='marker a';
-    ptAEl.textContent = t_ms.toFixed(3);
-  } else if (pointB === null){
-    pointB = i;
-    div.className='marker b';
-    ptBEl.textContent = t_ms.toFixed(3);
-    const dt = Math.abs(pointB - pointA)/sampleRate*1000;
-    dtMsEl.textContent = dt.toFixed(3);
-  } else {
-    clearMarkers();
-    placeMarker(i, x);
-    return;
-  }
-  div.style.left = Math.round(x)+'px';
-  waveWrap.appendChild(div);
-  btnResetPts.disabled=false;
+// speed calc
+btnCalc.onclick=()=>{ if(pointA!=null&&pointB!=null){const dt=Math.abs(pointB-pointA)/sampleRate; const L=parseFloat(document.getElementById('tubeLen').value); document.getElementById('c1').textContent=(L/dt).toFixed(2); document.getElementById('c2').textContent=(2*L/dt).toFixed(2);}}
+
+// FFT
+btnFFT.onclick=()=>{
+  if(!data) return; const N=Math.min(2048,viewEnd-viewStart); const seg=data.slice(viewStart,viewStart+N);
+  let re=new Float32Array(N), im=new Float32Array(N);
+  for(let i=0;i<N;i++){re[i]=seg[i];im[i]=0;}
+  fft(re,im); let mags=[]; for(let i=0;i<N/2;i++){const mag=Math.sqrt(re[i]*re[i]+im[i]*im[i]); mags.push(mag);}
+  let ctx2=document.getElementById('spectrum').getContext('2d'); ctx2.clearRect(0,0,1000,200); ctx2.beginPath(); ctx2.strokeStyle='#090';
+  for(let x=0;x<1000;x++){const idx=Math.floor(x/1000*(N/2)); const y=mags[idx]; const yy=200-y/Math.max(...mags)*200; if(x==0)ctx2.moveTo(x,yy); else ctx2.lineTo(x,yy);} ctx2.stroke();
+  let arr=[]; for(let i=1;i<N/2-1;i++){if(mags[i]>mags[i-1]&&mags[i]>mags[i+1]) arr.push({f:i*sampleRate/N, m:mags[i]});}
+  arr.sort((a,b)=>b.m-a.m); let top=arr.slice(0,5).map(o=>o.f.toFixed(1)+"Hz"); document.getElementById('peaks').textContent=top.join(", ");
+};
+
+// naive FFT
+function fft(re,im){
+  const N=re.length; if(N<=1)return; let reEven=new Float32Array(N/2),imEven=new Float32Array(N/2),reOdd=new Float32Array(N/2),imOdd=new Float32Array(N/2);
+  for(let i=0;i<N/2;i++){reEven[i]=re[i*2];imEven[i]=im[i*2];reOdd[i]=re[i*2+1];imOdd[i]=im[i*2+1];}
+  fft(reEven,imEven); fft(reOdd,imOdd);
+  for(let k=0;k<N/2;k++){const tRe=Math.cos(-2*Math.PI*k/N)*reOdd[k]-Math.sin(-2*Math.PI*k/N)*imOdd[k]; const tIm=Math.sin(-2*Math.PI*k/N)*reOdd[k]+Math.cos(-2*Math.PI*k/N)*imOdd[k]; re[k]=reEven[k]+tRe; im[k]=imEven[k]+tIm; re[k+N/2]=reEven[k]-tRe; im[k+N/2]=imEven[k]-tIm;}
 }
 
-// ==== Speed of sound from Δt ====
-btnComputeC.addEventListener('click', ()=>{
-  const L = parseFloat(tubeLen.value||'0');
-  if (!L || pointA===null || pointB===null){ cVal.textContent='—'; return; }
-  const dt = Math.abs(pointB - pointA)/sampleRate; // seconds
-  const model = document.querySelector('input[name="model"]:checked').value;
-  let c = 0;
-  if (model==='round'){ c = (2*L)/dt; } else { c = L/dt; }
-  cVal.textContent = c.toFixed(1);
-});
-
-// ==== Spectrum (FFT) ====
-// minimal radix-2 FFT (real -> complex)
-function fftRadix2(re, im){
-  const n = re.length;
-  // bit-reverse
-  let j=0;
-  for (let i=0;i<n;i++){
-    if (i<j){ const tr=re[i]; re[i]=re[j]; re[j]=tr; const ti=im[i]; im[i]=im[j]; im[j]=ti; }
-    let m = n>>1;
-    while (m>=1 && j>=m){ j-=m; m>>=1; }
-    j+=m;
-  }
-  for (let size=2; size<=n; size<<=1){
-    const half = size>>1;
-    const theta = -2*Math.PI/size;
-    const wr = Math.cos(theta), wi = Math.sin(theta);
-    for (let i=0; i<n; i+=size){
-      let ur=1, ui=0;
-      for (let k=0;k<half;k++){
-        const p = i+k, q = p+half;
-        const tr = ur*re[q] - ui*im[q];
-        const ti = ur*im[q] + ui*re[q];
-        re[q] = re[p] - tr; im[q] = im[p] - ti;
-        re[p] += tr; im[p] += ti;
-        const nur = ur*wr - ui*wi;
-        const nui = ur*wi + ui*wr;
-        ur = nur; ui = nui;
-      }
-    }
-  }
-}
-function drawSpectrum(mags, maxHz){
-  const c = spec.getContext('2d');
-  const W2 = spec.width, H2 = spec.height;
-  c.clearRect(0,0,W2,H2);
-  c.fillStyle='#ffffff'; c.fillRect(0,0,W2,H2);
-  c.fillStyle='#0d6efd22'; c.fillRect(0,0,W2,H2);
-  c.strokeStyle='#0d6efd'; c.beginPath();
-  const N = mags.length;
-  const sr = sampleRate;
-  for (let x=0; x<W2; x++){
-    const f = x/W2 * maxHz;
-    const bin = Math.floor(f * (N*2) / sr);
-    const m = mags[bin]||0;
-    const db = 20*Math.log10(m+1e-9);
-    const y = H2 - (db+120)/120 * H2; // scale -120..0 dB
-    if (x===0) c.moveTo(x,y); else c.lineTo(x,y);
-  }
-  c.stroke();
-}
-function findPeaks(mags, count=5, maxHz=2000){
-  const sr = sampleRate;
-  const out = [];
-  for (let i=1;i<mags.length-1;i++){
-    const f = i*sr/(mags.length*2);
-    if (f>maxHz) break;
-    if (mags[i]>mags[i-1] && mags[i]>mags[i+1]){
-      out.push({f, a:mags[i]});
-    }
-  }
-  out.sort((a,b)=>b.a-a.a);
-  return out.slice(0,count);
-}
-let specCtx = spec.getContext('2d');
-function clearSpectrum(){
-  specCtx.clearRect(0,0,spec.width,spec.height);
-  specCtx.fillStyle = '#f8f9fb';
-  specCtx.fillRect(0,0,spec.width,spec.height);
-}
-clearSpectrum();
-
-btnFFT.addEventListener('click', ()=>{
-  if (!data) return;
-  const Nfft = parseInt(fftSizeSel.value,10);
-  const winMs = parseFloat(fftWinMs.value);
-  const winSamples = Math.min(Nfft, Math.floor(winMs/1000*sampleRate));
-  const start = viewStart;
-  if (start+winSamples>=viewEnd) { alert('ズーム後の先頭から窓長分を解析します（表示を調整してください）'); }
-  const x = new Float32Array(Nfft);
-  const w = hann(winSamples);
-  for (let n=0;n<winSamples;n++){
-    x[n] = (data[start+n]||0) * w[n];
-  }
-  const re = x.slice(); const im = new Float32Array(Nfft);
-  fftRadix2(re, im);
-  const mags = new Float32Array(Nfft/2);
-  for (let i=0;i<mags.length;i++){ const r=re[i], ii=im[i]; mags[i]=Math.hypot(r,ii); }
-  drawSpectrum(mags, 2000);
-  const pk = findPeaks(mags, 5, 2000);
-  peaksEl.innerHTML = '<b>ピーク（低い順）:</b> ' + pk.sort((a,b)=>a.f-b.f).map(p=>p.f.toFixed(1)+' Hz').join(' , ');
-});
-
-// ==== Wire UI ====
-btnImpulse.addEventListener('click', playImpulse);
-btnNoiseStart.addEventListener('click', startNoise);
-btnNoiseStop.addEventListener('click', stopNoise);
-btnRec.addEventListener('click', startRec);
-btnStopRec.addEventListener('click', stopRec);
-navigator.mediaDevices?.getUserMedia?.({audio:true}).then(()=>refreshDevices());
-
-// init drawing
 drawWave();
 </script>
 </body>
