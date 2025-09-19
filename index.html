@@ -5,38 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>音波解析</title>
 <style>
-  body{font-family:'Segoe UI',sans-serif;background:#f0f2f5;margin:0;padding:20px;color:#333;}
+  :root{
+    --card-bg:#fff;
+    --page-bg:#f0f2f5;
+    --text:#333;
+    --primary:#1b84ff;
+    --accent:#ff6a00;
+    --ok:#28a745;
+    --danger:#dc3545;
+    --mute:#6c757d;
+  }
+  body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--page-bg);margin:0;padding:20px;color:var(--text);}
   h1{margin:0 0 16px;font-size:1.6em;color:#222;}
-  h2{margin-top:0;font-size:1.1em;color:#444;}
-  .card{background:#fff;border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,0.1);padding:16px 20px;margin-bottom:20px;}
-  button{margin:4px;padding:6px 12px;border:none;border-radius:8px;font-size:0.9em;cursor:pointer;transition:background 0.2s;color:#fff;}
-  button:disabled{background:#ccc;cursor:default;color:#fff;}
-  .btn-impulse{background:#ff6a00;} .btn-impulse:hover{background:#cc5500;}
-  .btn-noise{background:#28a745;} .btn-noise:hover{background:#1e7e34;}
-  .btn-stop{background:#dc3545;} .btn-stop:hover{background:#a71d2a;}
-  .btn-rec{background:#dc3545;} .btn-rec:hover{background:#a71d2a;}
-  .btn-stoprec{background:#6c757d;} .btn-stoprec:hover{background:#565e64;}
-  .btn-action{background:#1b84ff;} .btn-action:hover{background:#1059aa;}
-  input[type=number]{width:80px;padding:4px 6px;border:1px solid #ccc;border-radius:6px;}
-  select{padding:4px 6px;border-radius:6px;border:1px solid #ccc;}
-  #waveWrap{position:relative;width:min(100%,1000px);margin-top:8px;}
-  #wave{width:100%;height:240px;display:block;background:#fff;border:1px solid #ddd;border-radius:12px;}
-  .marker{position:absolute;top:0;width:2px;height:240px;}
-  .marker.a{background:#ff6a00}
-  .marker.b{background:#1b84ff}
-  canvas.spectrum{width:100%;height:200px;display:block;border:1px solid #ddd;border-radius:12px;margin-top:8px;}
-  .badge{display:inline-block;margin-top:8px;background:#eef;padding:4px 8px;border-radius:8px;font-size:0.85em;color:#333;}
-  .split{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;}
-  .block{flex:1;min-width:240px;}
+  h2{margin:0 0 8px;font-size:1.1em;color:#444;}
+  .card{background:var(--card-bg);border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,.08);padding:16px 20px;margin-bottom:20px;}
+  .split{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+  .block{flex:1;min-width:260px}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  button{padding:8px 12px;border:none;border-radius:10px;font-size:.95em;cursor:pointer;color:#fff;transition:.15s}
+  button:disabled{background:#c9c9c9;cursor:default}
+  .btn-impulse{background:var(--accent)} .btn-impulse:hover{filter:brightness(.95)}
+  .btn-noise{background:var(--ok)} .btn-noise:hover{filter:brightness(.95)}
+  .btn-stop{background:var(--danger)} .btn-stop:hover{filter:brightness(.95)}
+  .btn-rec{background:var(--danger)} .btn-rec:hover{filter:brightness(.95)}
+  .btn-stoprec{background:var(--mute)} .btn-stoprec:hover{filter:brightness(.95)}
+  .btn-action{background:var(--primary)} .btn-action:hover{filter:brightness(.95)}
+  label{display:inline-flex;align-items:center;gap:6px}
+  input[type=number]{width:90px;padding:6px 8px;border:1px solid #ddd;border-radius:8px;background:#fafafa;color:#222}
+  select{padding:6px 8px;border-radius:8px;border:1px solid #ddd;background:#fafafa;color:#222}
+  .badge{display:inline-block;margin-top:8px;background:#eef;padding:6px 10px;border-radius:10px;font-size:.85em;color:#333}
+  #waveWrap{position:relative;width:min(100%,1000px);margin-top:8px}
+  #wave{width:100%;height:260px;display:block;background:#fff;border:1px solid #ddd;border-radius:12px}
+  .marker{position:absolute;top:0;width:2px;height:260px}
+  .marker.a{background:var(--accent)} .marker.b{background:var(--primary)}
+  canvas.spectrum{width:100%;height:200px;display:block;border:1px solid #ddd;border-radius:12px;margin-top:8px;background:#fff}
+  .note{font-size:.85em;color:#666}
 </style>
 </head>
 <body>
 <h1>音波解析</h1>
 
+<!-- 1,2,3 を1カードに横並び -->
 <div class="card split">
   <div class="block">
     <h2>1. 再生</h2>
-    <div>
+    <div class="row">
       <button id="btnImpulse" class="btn-impulse">インパルス</button>
       <button id="btnNoiseShort" class="btn-noise">ノイズ短</button>
       <button id="btnNoise" class="btn-noise">ノイズ連続</button>
@@ -45,53 +58,73 @@
   </div>
   <div class="block">
     <h2>2. 録音</h2>
-    <div>
+    <div class="row">
       <button id="btnRec" class="btn-rec">録音開始</button>
       <button id="btnStopRec" class="btn-stoprec" disabled>録音停止</button>
     </div>
-    <span id="recStatus">未録音</span>
+    <div class="note" id="recStatus">未録音</div>
   </div>
   <div class="block">
     <h2>3. 発音＋録音</h2>
-    <label>音の種類:
-      <select id="soundType">
-        <option value="impulse">インパルス</option>
-        <option value="noiseShort">ホワイトノイズ（短時間）</option>
-      </select>
-    </label>
-    <div>
+    <div class="row" style="align-items:center">
+      <label>音の種類:
+        <select id="soundType">
+          <option value="impulse">インパルス</option>
+          <option value="noiseShort">ホワイトノイズ（短時間）</option>
+        </select>
+      </label>
       <button id="btnPlayRec" class="btn-action">発音＋録音</button>
     </div>
   </div>
 </div>
 
+<!-- 波形（録音データ用） -->
 <div class="card">
-  <h2>波形表示</h2>
+  <h2>4. 波形表示（録音データ）</h2>
   <div id="waveWrap">
-    <canvas id="wave" width="1000" height="240"></canvas>
+    <canvas id="wave" width="1000" height="260"></canvas>
   </div>
-  <div style="margin-top:6px;">
+  <div class="row" style="margin-top:8px">
     <button id="btnZoomOut" class="btn-action" disabled>全体表示</button>
     <button id="btnResetPts" class="btn-action" disabled>測定点リセット</button>
-    <span>点A: <span id="ptA">—</span> ms</span> /
-    <span>点B: <span id="ptB">—</span> ms</span> /
-    <span>Δt: <span id="dtMs">—</span> ms</span>
+    <div class="badge">点A: <span id="ptA">—</span> ms</div>
+    <div class="badge">点B: <span id="ptB">—</span> ms</div>
+    <div class="badge">Δt: <span id="dtMs">—</span> ms</div>
   </div>
-  <div class="badge">サンプリングレート: <span id="srVal">—</span> Hz ／ 1サンプル ≈ <span id="spMsVal">—</span> ms</div>
+  <div class="badge" style="margin-top:8px">サンプリングレート: <span id="srVal">—</span> Hz ／ 1サンプル ≈ <span id="spMsVal">—</span> ms</div>
 </div>
 
+<!-- 音速計算 -->
 <div class="card">
-  <h2>音速計算</h2>
-  <label>管長 L [m]: <input id="tubeLen" type="number" step="0.01" value="1.00"></label>
-  <button id="btnCalc" class="btn-action">計算</button>
-  <div style="margin-top:6px;">片道: <span id="c1">—</span> m/s ／ 往復: <span id="c2">—</span> m/s</div>
+  <h2>5. 音速計算</h2>
+  <div class="row">
+    <label>管長 L [m]: <input id="tubeLen" type="number" step="0.01" value="1.00"></label>
+    <button id="btnCalc" class="btn-action">計算</button>
+  </div>
+  <div class="row" style="margin-top:8px">
+    <div class="badge">片道: <span id="c1">—</span> m/s</div>
+    <div class="badge">往復: <span id="c2">—</span> m/s</div>
+  </div>
 </div>
 
+<!-- FFT（録音データに対して） -->
 <div class="card">
-  <h2>FFTスペクトル</h2>
+  <h2>6. FFTスペクトル（録音データ）</h2>
   <button id="btnFFT" class="btn-action">スペクトル解析</button>
   <canvas id="spectrum" class="spectrum" width="1000" height="200"></canvas>
-  <div style="margin-top:6px;">ピーク周波数: <span id="peaks">—</span></div>
+  <div class="note">ピーク周波数（上位5）: <span id="peaks">—</span></div>
+</div>
+
+<!-- オシロスコープ -->
+<div class="card">
+  <h2>7. オシロスコープモード（リアルタイム）</h2>
+  <div class="row">
+    <button id="btnScopeStart" class="btn-action">開始</button>
+    <button id="btnScopeStop" class="btn-stop" disabled>停止</button>
+  </div>
+  <canvas id="scopeCanvas" width="1000" height="260" style="margin-top:8px"></canvas>
+  <canvas id="scopeFFT" width="1000" height="200" style="margin-top:8px"></canvas>
+  <div class="note">マイク入力をリアルタイムに表示します（保存はしません）。</div>
 </div>
 
 <script>
@@ -101,140 +134,239 @@ let sampleRate=audioCtx.sampleRate;
 document.getElementById('srVal').textContent=sampleRate;
 document.getElementById('spMsVal').textContent=(1000/sampleRate).toFixed(3);
 
-// ===== Playback functions =====
+// ===== Playback =====
+function stopSound(){ if(sourceNode){sourceNode.stop(); sourceNode.disconnect(); sourceNode=null;} }
 function playImpulse(){
   stopSound();
-  let buf=audioCtx.createBuffer(1,sampleRate,sampleRate);
-  let d=buf.getChannelData(0);
-  d[0]=1.0;  // 単一サンプルだけのインパルス
+  const buf=audioCtx.createBuffer(1, sampleRate, sampleRate);
+  const d=buf.getChannelData(0);
+  d[0]=1.0; // 単一サンプル
   sourceNode=audioCtx.createBufferSource();
-  sourceNode.buffer=buf;
-  sourceNode.connect(audioCtx.destination);
-  sourceNode.start();
+  sourceNode.buffer=buf; sourceNode.connect(audioCtx.destination); sourceNode.start();
 }
-
 function playNoiseShort(){
   stopSound();
-  let dur=0.1; // 100ms
-  let buf=audioCtx.createBuffer(1,sampleRate, sampleRate*dur);
-  let d=buf.getChannelData(0);
+  const dur=0.1; // 100ms
+  const buf=audioCtx.createBuffer(1, sampleRate, Math.max(1, Math.floor(sampleRate*dur)));
+  const d=buf.getChannelData(0);
   for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
   sourceNode=audioCtx.createBufferSource();
-  sourceNode.buffer=buf;
-  sourceNode.connect(audioCtx.destination);
-  sourceNode.start();
-  sourceNode.stop(audioCtx.currentTime+dur); // 100msで停止
+  sourceNode.buffer=buf; sourceNode.connect(audioCtx.destination); sourceNode.start();
+  sourceNode.stop(audioCtx.currentTime + dur); // 明示停止
 }
-
 function playNoise(){
   stopSound();
-  let buf=audioCtx.createBuffer(1,sampleRate,sampleRate*2);
-  let d=buf.getChannelData(0);
+  const buf=audioCtx.createBuffer(1, sampleRate, sampleRate*2);
+  const d=buf.getChannelData(0);
   for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1;
   sourceNode=audioCtx.createBufferSource();
-  sourceNode.buffer=buf;
-  sourceNode.loop=true;
-  sourceNode.connect(audioCtx.destination);
-  sourceNode.start();
+  sourceNode.buffer=buf; sourceNode.loop=true; sourceNode.connect(audioCtx.destination); sourceNode.start();
 }
-function stopSound(){ if(sourceNode){sourceNode.stop(); sourceNode.disconnect(); sourceNode=null;}}
 btnImpulse.onclick=playImpulse; btnNoiseShort.onclick=playNoiseShort; btnNoise.onclick=playNoise; btnStop.onclick=stopSound;
 
-// ===== Recording =====
+// ===== Recording (to analyze later) =====
 async function startRecording(){
   mediaStream=await navigator.mediaDevices.getUserMedia({audio:true});
   recorder=new MediaRecorder(mediaStream);
   recChunks=[];
   recorder.ondataavailable=e=>recChunks.push(e.data);
   recorder.onstop=async ()=>{
-    let blob=new Blob(recChunks); let arr=await blob.arrayBuffer();
-    audioCtx.decodeAudioData(arr,buff=>{ data=buff.getChannelData(0); viewStart=0; viewEnd=data.length; drawWave(); document.getElementById('recStatus').textContent="録音完了"; });
+    const blob=new Blob(recChunks);
+    const arr=await blob.arrayBuffer();
+    audioCtx.decodeAudioData(arr,buff=>{
+      data=buff.getChannelData(0);
+      viewStart=0; viewEnd=data.length;
+      drawWave();
+      document.getElementById('recStatus').textContent="録音完了";
+      btnZoomOut.disabled=false;
+    });
   };
-  recorder.start(); document.getElementById('recStatus').textContent="録音中…";
+  recorder.start();
+  document.getElementById('recStatus').textContent="録音中…";
 }
-function stopRecording(){if(recorder){recorder.stop(); document.getElementById('recStatus').textContent="停止";}}
-btnRec.onclick=()=>{startRecording();btnRec.disabled=true;btnStopRec.disabled=false;};
-btnStopRec.onclick=()=>{stopRecording();btnRec.disabled=false;btnStopRec.disabled=true;};
+function stopRecording(){
+  if(recorder){recorder.stop(); document.getElementById('recStatus').textContent="停止";}
+  if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); }
+}
+btnRec.onclick=()=>{startRecording(); btnRec.disabled=true; btnStopRec.disabled=false;};
+btnStopRec.onclick=()=>{stopRecording(); btnRec.disabled=false; btnStopRec.disabled=true;};
 
-// 発音＋録音（インパルス=200ms録音、ノイズ短=300ms録音）
+// 発音＋録音
 btnPlayRec.onclick=async ()=>{
   await startRecording();
-  let type=document.getElementById('soundType').value;
+  const type=document.getElementById('soundType').value;
   if(type==="impulse"){ playImpulse(); setTimeout(stopRecording,200); }
   else { playNoiseShort(); setTimeout(stopRecording,300); }
 };
 
-// ===== Waveform + zoom + markers + FFT =====
-let wave=document.getElementById('wave'); let ctx=wave.getContext('2d'); let W=wave.width,H=wave.height;
-let waveWrap=document.getElementById('waveWrap');
-let btnZoomOut=document.getElementById('btnZoomOut'); let btnResetPts=document.getElementById('btnResetPts');
-let ptAEl=document.getElementById('ptA'); let ptBEl=document.getElementById('ptB'); let dtMsEl=document.getElementById('dtMs');
-let data=new Float32Array(sampleRate*2); for(let i=0;i<data.length;i++){data[i]=Math.sin(2*Math.PI*440*i/sampleRate)*0.5;}
-let viewStart=0,viewEnd=data.length;
+// ===== Waveform / Zoom / Markers =====
+const wave=document.getElementById('wave'); const wctx=wave.getContext('2d'); const W=wave.width,H=wave.height;
+const waveWrap=document.getElementById('waveWrap');
+const btnZoomOut=document.getElementById('btnZoomOut'); const btnResetPts=document.getElementById('btnResetPts');
+const ptAEl=document.getElementById('ptA'); const ptBEl=document.getElementById('ptB'); const dtMsEl=document.getElementById('dtMs');
+let data=new Float32Array(sampleRate*2); for(let i=0;i<data.length;i++){ data[i]=Math.sin(2*Math.PI*440*i/sampleRate)*0.4; }
+let viewStart=0, viewEnd=data.length;
 
 function drawWave(){
-  ctx.clearRect(0,0,W,H);
-  const N=viewEnd-viewStart; const step=Math.max(1,Math.floor(N/W)); const amp=H/2;
-  ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#1b84ff'; ctx.beginPath();
+  wctx.clearRect(0,0,W,H);
+  const N=viewEnd-viewStart; const step=Math.max(1, Math.floor(N/W)); const mid=H/2;
+  wctx.fillStyle='#fff'; wctx.fillRect(0,0,W,H);
+  wctx.strokeStyle='#1b84ff'; wctx.beginPath();
   for(let x=0;x<W;x++){
-    const i0=viewStart+x*step; let min=1e9,max=-1e9;
-    for(let k=0;k<step;k++){ const v=data[i0+k]||0; if(v<min)min=v; if(v>max)max=v;}
-    ctx.moveTo(x,amp*(1-min)); ctx.lineTo(x,amp*(1-max));
+    const base=viewStart + x*step;
+    let min=1e9, max=-1e9;
+    for(let k=0;k<step;k++){ const v=data[base+k]||0; if(v<min)min=v; if(v>max)max=v; }
+    wctx.moveTo(x, mid*(1-min));
+    wctx.lineTo(x, mid*(1-max));
   }
-  ctx.stroke();
+  wctx.stroke();
 }
-function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
-function xToIndex(x){const frac=clamp(x/W,0,1); return Math.floor(viewStart+frac*(viewEnd-viewStart));}
+function clamp(x,a,b){return Math.max(a, Math.min(b,x));}
+function xToIndex(x){ const frac=clamp(x/W,0,1); return Math.floor(viewStart + frac*(viewEnd-viewStart)); }
 
-// zoom selection
+// ドラッグでズーム、クリックでマーカー
 let dragging=false,dragA=0,dragB=0;
-wave.addEventListener('mousedown',e=>{dragging=true;dragA=e.offsetX;dragB=e.offsetX;drawWave();shadeSel();});
-wave.addEventListener('mousemove',e=>{if(dragging){dragB=e.offsetX;drawWave();shadeSel();}});
+wave.addEventListener('mousedown',e=>{dragging=true; dragA=e.offsetX; dragB=e.offsetX; drawWave(); shadeSel();});
+wave.addEventListener('mousemove',e=>{ if(dragging){ dragB=e.offsetX; drawWave(); shadeSel(); } });
 wave.addEventListener('mouseup',e=>{
-  if(!dragging)return; dragging=false;
+  if(!dragging) return; dragging=false;
   const a=Math.min(dragA,dragB), b=Math.max(dragA,dragB);
-  if(Math.abs(b-a)>6&&data){
-    const iA=xToIndex(a),iB=xToIndex(b);
+  if(Math.abs(b-a)>6 && data){
+    const iA=xToIndex(a), iB=xToIndex(b);
     viewStart=iA; viewEnd=iB; drawWave(); btnZoomOut.disabled=false;
+  }else{
+    placeMarker(xToIndex(e.offsetX), e.offsetX);
   }
 });
-function shadeSel(){const a=Math.min(dragA,dragB),b=Math.max(dragA,dragB); ctx.fillStyle='rgba(255,200,0,0.2)'; ctx.fillRect(a,0,b-a,H);}
-btnZoomOut.onclick=()=>{viewStart=0;viewEnd=data.length;drawWave();btnZoomOut.disabled=true;};
+function shadeSel(){ const a=Math.min(dragA,dragB), b=Math.max(dragA,dragB); wctx.fillStyle='rgba(255,200,0,.22)'; wctx.fillRect(a,0,b-a,H); }
+btnZoomOut.onclick=()=>{ viewStart=0; viewEnd=data.length; drawWave(); btnZoomOut.disabled=true; };
 
-// markers
-let pointA=null,pointB=null;
-function clearMarkers(){Array.from(document.querySelectorAll('.marker')).forEach(el=>el.remove());pointA=pointB=null;ptAEl.textContent='—';ptBEl.textContent='—';dtMsEl.textContent='—';}
+// マーカー
+let pointA=null, pointB=null;
+function clearMarkers(){
+  Array.from(document.querySelectorAll('.marker')).forEach(el=>el.remove());
+  pointA=pointB=null; ptAEl.textContent='—'; ptBEl.textContent='—'; dtMsEl.textContent='—';
+}
 btnResetPts.onclick=clearMarkers;
-function placeMarker(i,x){const t_ms=(i/sampleRate)*1000; const div=document.createElement('div');
-  if(pointA===null){pointA=i;div.className='marker a';ptAEl.textContent=t_ms.toFixed(3);}
-  else if(pointB===null){pointB=i;div.className='marker b';ptBEl.textContent=t_ms.toFixed(3); const dt=Math.abs(pointB-pointA)/sampleRate*1000;dtMsEl.textContent=dt.toFixed(3);}
-  else{clearMarkers();placeMarker(i,x);return;}
-  div.style.left=Math.round(x)+'px';waveWrap.appendChild(div);btnResetPts.disabled=false;}
-
-// speed calc
-btnCalc.onclick=()=>{ if(pointA!=null&&pointB!=null){const dt=Math.abs(pointB-pointA)/sampleRate; const L=parseFloat(document.getElementById('tubeLen').value); document.getElementById('c1').textContent=(L/dt).toFixed(2); document.getElementById('c2').textContent=(2*L/dt).toFixed(2);}}
-
-// FFT
-btnFFT.onclick=()=>{
-  if(!data) return; const N=Math.min(2048,viewEnd-viewStart); const seg=data.slice(viewStart,viewStart+N);
-  let re=new Float32Array(N), im=new Float32Array(N);
-  for(let i=0;i<N;i++){re[i]=seg[i];im[i]=0;}
-  fft(re,im); let mags=[]; for(let i=0;i<N/2;i++){const mag=Math.sqrt(re[i]*re[i]+im[i]*im[i]); mags.push(mag);}
-  let ctx2=document.getElementById('spectrum').getContext('2d'); ctx2.clearRect(0,0,1000,200); ctx2.beginPath(); ctx2.strokeStyle='#090';
-  for(let x=0;x<1000;x++){const idx=Math.floor(x/1000*(N/2)); const y=mags[idx]; const yy=200-y/Math.max(...mags)*200; if(x==0)ctx2.moveTo(x,yy); else ctx2.lineTo(x,yy);} ctx2.stroke();
-  let arr=[]; for(let i=1;i<N/2-1;i++){if(mags[i]>mags[i-1]&&mags[i]>mags[i+1]) arr.push({f:i*sampleRate/N, m:mags[i]});}
-  arr.sort((a,b)=>b.m-a.m); let top=arr.slice(0,5).map(o=>o.f.toFixed(1)+"Hz"); document.getElementById('peaks').textContent=top.join(", ");
-};
-
-// naive FFT
-function fft(re,im){
-  const N=re.length; if(N<=1)return; let reEven=new Float32Array(N/2),imEven=new Float32Array(N/2),reOdd=new Float32Array(N/2),imOdd=new Float32Array(N/2);
-  for(let i=0;i<N/2;i++){reEven[i]=re[i*2];imEven[i]=im[i*2];reOdd[i]=re[i*2+1];imOdd[i]=im[i*2+1];}
-  fft(reEven,imEven); fft(reOdd,imOdd);
-  for(let k=0;k<N/2;k++){const tRe=Math.cos(-2*Math.PI*k/N)*reOdd[k]-Math.sin(-2*Math.PI*k/N)*imOdd[k]; const tIm=Math.sin(-2*Math.PI*k/N)*reOdd[k]+Math.cos(-2*Math.PI*k/N)*imOdd[k]; re[k]=reEven[k]+tRe; im[k]=imEven[k]+tIm; re[k+N/2]=reEven[k]-tRe; im[k+N/2]=imEven[k]-tIm;}
+function placeMarker(i,x){
+  const t_ms=(i/sampleRate)*1000;
+  const div=document.createElement('div');
+  if(pointA===null){ pointA=i; div.className='marker a'; ptAEl.textContent=t_ms.toFixed(3); }
+  else if(pointB===null){ pointB=i; div.className='marker b'; ptBEl.textContent=t_ms.toFixed(3); const dt=Math.abs(pointB-pointA)/sampleRate*1000; dtMsEl.textContent=dt.toFixed(3); }
+  else{ clearMarkers(); placeMarker(i,x); return; }
+  div.style.left=Math.round(x)+'px';
+  waveWrap.appendChild(div);
+  btnResetPts.disabled=false;
 }
 
+// ===== Speed of sound =====
+btnCalc.onclick=()=>{
+  if(pointA!=null && pointB!=null){
+    const dt=Math.abs(pointB-pointA)/sampleRate;
+    const L=parseFloat(document.getElementById('tubeLen').value);
+    document.getElementById('c1').textContent=(L/dt).toFixed(2);
+    document.getElementById('c2').textContent=(2*L/dt).toFixed(2);
+  }
+};
+
+// ===== FFT on recorded data =====
+btnFFT.onclick=()=>{
+  if(!data) return;
+  const N=Math.min(4096, viewEnd-viewStart);
+  const seg=data.slice(viewStart, viewStart+N);
+  const re=new Float32Array(N), im=new Float32Array(N);
+  for(let i=0;i<N;i++){ re[i]=seg[i]; im[i]=0; }
+  fft(re,im);
+  const mags=new Float32Array(N/2);
+  let maxMag=1e-12;
+  for(let i=0;i<N/2;i++){ const m=Math.hypot(re[i],im[i]); mags[i]=m; if(m>maxMag) maxMag=m; }
+  const sctx=document.getElementById('spectrum').getContext('2d');
+  sctx.clearRect(0,0,1000,200);
+  sctx.beginPath(); sctx.strokeStyle='#0a0';
+  for(let x=0;x<1000;x++){
+    const idx=Math.floor(x/1000*(N/2));
+    const y=200 - (mags[idx]/maxMag)*200;
+    if(x===0) sctx.moveTo(x,y); else sctx.lineTo(x,y);
+  }
+  sctx.stroke();
+  // peaks
+  const peaks=[];
+  for(let i=2;i<N/2-2;i++){
+    if(mags[i]>mags[i-1]&&mags[i]>mags[i+1]) peaks.push({f:i*sampleRate/N, m:mags[i]});
+  }
+  peaks.sort((a,b)=>b.m-a.m);
+  document.getElementById('peaks').textContent=peaks.slice(0,5).map(p=>p.f.toFixed(1)+'Hz').join(', ');
+};
+
+// Cooley–Tukey (recursive) - naive but fine for N<=4096
+function fft(re,im){
+  const N=re.length; if(N<=1) return;
+  const reE=new Float32Array(N/2), imE=new Float32Array(N/2);
+  const reO=new Float32Array(N/2), imO=new Float32Array(N/2);
+  for(let i=0;i<N/2;i++){ reE[i]=re[i*2]; imE[i]=im[i*2]; reO[i]=re[i*2+1]; imO[i]=im[i*2+1]; }
+  fft(reE,imE); fft(reO,imO);
+  for(let k=0;k<N/2;k++){
+    const ang=-2*Math.PI*k/N;
+    const c=Math.cos(ang), s=Math.sin(ang);
+    const tr=c*reO[k]-s*imO[k], ti=s*reO[k]+c*imO[k];
+    re[k]=reE[k]+tr; im[k]=imE[k]+ti;
+    re[k+N/2]=reE[k]-tr; im[k+N/2]=imE[k]-ti;
+  }
+}
+
+// ===== Oscilloscope (real-time) =====
+const scopeCanvas=document.getElementById('scopeCanvas');
+const scopeCtx=scopeCanvas.getContext('2d');
+const scopeFFTCanvas=document.getElementById('scopeFFT');
+const scopeFFTCtx=scopeFFTCanvas.getContext('2d');
+let scopeStream=null, scopeSource=null, analyserScope=null, scopeData=null, scopeFreq=null, scopeAnim=null;
+
+async function startScope(){
+  scopeStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  scopeSource=audioCtx.createMediaStreamSource(scopeStream);
+  analyserScope=audioCtx.createAnalyser();
+  analyserScope.fftSize=2048;
+  scopeData=new Uint8Array(analyserScope.fftSize);
+  scopeFreq=new Uint8Array(analyserScope.frequencyBinCount);
+  scopeSource.connect(analyserScope);
+  drawScope();
+  btnScopeStart.disabled=true; btnScopeStop.disabled=false;
+}
+function drawScope(){
+  scopeAnim=requestAnimationFrame(drawScope);
+  analyserScope.getByteTimeDomainData(scopeData);
+  analyserScope.getByteFrequencyData(scopeFreq);
+  // time
+  scopeCtx.clearRect(0,0,scopeCanvas.width,scopeCanvas.height);
+  scopeCtx.beginPath();
+  for(let x=0;x<scopeCanvas.width;x++){
+    const i=Math.floor(x/scopeCanvas.width * scopeData.length);
+    const v=scopeData[i]/128-1;
+    const y=scopeCanvas.height/2 + v*(scopeCanvas.height*0.4);
+    if(x===0) scopeCtx.moveTo(x,y); else scopeCtx.lineTo(x,y);
+  }
+  scopeCtx.strokeStyle="#1b84ff"; scopeCtx.stroke();
+  // freq
+  scopeFFTCtx.clearRect(0,0,scopeFFTCanvas.width,scopeFFTCanvas.height);
+  const barW=scopeFFTCanvas.width/scopeFreq.length;
+  scopeFFTCtx.fillStyle="#0a0";
+  for(let i=0;i<scopeFreq.length;i++){
+    const val=scopeFreq[i]/255;
+    const h=val*scopeFFTCanvas.height;
+    scopeFFTCtx.fillRect(i*barW, scopeFFTCanvas.height-h, barW, h);
+  }
+}
+function stopScope(){
+  if(scopeAnim) cancelAnimationFrame(scopeAnim);
+  scopeCtx.clearRect(0,0,scopeCanvas.width,scopeCanvas.height);
+  scopeFFTCtx.clearRect(0,0,scopeFFTCanvas.width,scopeFFTCanvas.height);
+  if(scopeStream){ scopeStream.getTracks().forEach(t=>t.stop()); scopeStream=null; }
+  btnScopeStart.disabled=false; btnScopeStop.disabled=true;
+}
+btnScopeStart.onclick=startScope;
+btnScopeStop.onclick=stopScope;
+
+// 初期描画
 drawWave();
 </script>
 </body>
